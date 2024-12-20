@@ -25,8 +25,8 @@ const float EPSILON = 0.0001;
 
 // Light setup
 const vec3 lightPos = vec3(4.0, 3.0, -1.0);
-const vec2 lightSize = vec2(2.0, 2.0);
-const vec3 lightEmission = vec3(3.0);
+const vec2 lightSize = vec2(4.0, 4.0);
+const vec3 lightEmission = vec3(10.0);
 
 // Camera setup
 const vec3 camPos = vec3(0.0, 0.0, -4.0);
@@ -393,7 +393,7 @@ out vec4 outColor;
 uniform sampler2D u_accum;
 
 void main(){
-    vec3 accum=texture(u_accum,v_uv).rgb * 5.0;
+    vec3 accum=texture(u_accum,v_uv).rgb * 1.0;
     vec3 gammaColor=pow(accum,vec3(1.0/2.2));
     outColor=vec4(gammaColor,1.0);
 }
