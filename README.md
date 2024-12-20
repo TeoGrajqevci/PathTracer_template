@@ -1,2 +1,2 @@
 # PathTracer_template
- a JS/GLSL raymarching + multiple importance sampling pathtracer Template
+ A JS/GLSL raymarching + multiple importance sampling pathtracer Template
