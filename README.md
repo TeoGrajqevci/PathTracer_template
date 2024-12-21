@@ -7,3 +7,4 @@
 
  1. Add denoising for true real-time
  2. Fix some issue with the BSDF
+ 3. Implement other types of lights
