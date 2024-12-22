@@ -26,6 +26,8 @@ uniform int u_frameCount;
 uniform vec2 u_resolution;
 uniform vec4 u_randomSeed;
 
+uniform vec3 u_cameraPos;
+
 const int MAX_BOUNCES = 6;
 const float EPSILON = 0.0001;
 
@@ -382,7 +384,7 @@ void main(){
     uvec4 seed = seedFromVec4(sb);
 
     float aspect = u_resolution.x / u_resolution.y;
-    mat3 cam = calcCameraMatrix(camPos, camTarget, camUp);
+    mat3 cam = calcCameraMatrix(u_cameraPos, camTarget, camUp);
     float fs = tan(fov * 0.5);
 
     // Jitter for DOF or anti-aliasing
@@ -397,7 +399,7 @@ void main(){
     // Example extra rotation if desired:
     rd = rotationX(0.0) * rotationY(0.0) * rotationZ(0.0) * rd;
 
-    vec3 ro = camPos;
+    vec3 ro = u_cameraPos;
     vec3 c = traceRay(seed, ro, rd);
     outColor = vec4(c, 1.0);
 }
