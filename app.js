@@ -1,6 +1,4 @@
 // WebGLApp.js
-// Encapsulates the WebGL application logic into a class structure.
-// Allows external setting of uniforms for different shader programs.
 
 import {
   vertexShaderSource,
