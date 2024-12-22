@@ -267,7 +267,7 @@ function render() {
   gl.uniform2f(u_res_DENOISE, width, height);
   // Example sigma values (tweak to taste):
   gl.uniform1f(u_spatialSigma, 2.0);
-  gl.uniform1f(u_colorSigma, 0.1);
+  gl.uniform1f(u_colorSigma, 0.2);
 
   gl.framebufferTexture2D(
     gl.FRAMEBUFFER,
@@ -286,7 +286,7 @@ function render() {
   gl.useProgram(displayProg);
   enablePositionAttrib(displayProg);
 
-  // Now read from the denoised texture
+  // Read from the denoised texture
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, denoiseTex);
   gl.uniform1i(u_accum_DISP, 0);

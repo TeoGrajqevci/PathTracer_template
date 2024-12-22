@@ -2,7 +2,7 @@
 // Exporting all shader source codes
 
 //
-// 1) Vertex Shader (unchanged)
+// 1) Vertex Shader
 //
 export const vertexShaderSource = `#version 300 es
 in vec2 a_position;
@@ -26,7 +26,7 @@ uniform int u_frameCount;
 uniform vec2 u_resolution;
 uniform vec4 u_randomSeed;
 
-const int MAX_BOUNCES = 8;
+const int MAX_BOUNCES = 6;
 const float EPSILON = 0.0001;
 
 // Light setup
@@ -136,7 +136,7 @@ HitInfo sceneSDF(vec3 p){
 }
 
 vec3 calcNormal(vec3 p) {
-    float h = 0.0005;
+    float h = 0.005;
     float d = sceneSDF(p).dist;
     vec3 n = normalize(vec3(
         sceneSDF(p + vec3(h, 0, 0)).dist - d,
@@ -148,7 +148,7 @@ vec3 calcNormal(vec3 p) {
 
 SceneHit rayMarch(vec3 ro, vec3 rd){
     float t = 0.0;
-    for(int i=0;i<256;i++){
+    for(int i=0;i<200;i++){
         vec3 p = ro + rd * t;
         HitInfo h = sceneSDF(p);
         if(h.dist < EPSILON){
