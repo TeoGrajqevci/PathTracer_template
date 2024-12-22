@@ -6,7 +6,7 @@ import {
   vertexShaderSource,
   pathTracerFS,
   accumulateFS,
-  denoiseFS, // <-- Import the new denoise shader
+  denoiseFS,
   displayFS,
 } from "./shaders.js";
 
@@ -112,7 +112,7 @@ let height = canvas.height;
 let accumTexA = createFloatTex(width, height);
 let accumTexB = createFloatTex(width, height);
 let sampleTex = createFloatTex(width, height);
-let denoiseTex = createFloatTex(width, height); // <-- Additional texture for denoised output
+let denoiseTex = createFloatTex(width, height);
 
 function clearTex(tex) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -267,7 +267,7 @@ function render() {
   gl.uniform2f(u_res_DENOISE, width, height);
   // Example sigma values (tweak to taste):
   gl.uniform1f(u_spatialSigma, 2.0);
-  gl.uniform1f(u_colorSigma, 0.2);
+  gl.uniform1f(u_colorSigma, 0.1);
 
   gl.framebufferTexture2D(
     gl.FRAMEBUFFER,

@@ -30,15 +30,15 @@ const int MAX_BOUNCES = 6;
 const float EPSILON = 0.0001;
 
 // Light setup
-const vec3 lightPos = vec3(4.0, 3.0, -1.0);
+const vec3 lightPos = vec3(0.0, 3.0, 0.0);
 const vec2 lightSize = vec2(4.0, 4.0);
-const vec3 lightEmission = vec3(10.0);
+const vec3 lightEmission = vec3(5.0);
 
 // Camera setup
 const vec3 camPos = vec3(0.0, 0.0, -4.0);
 const vec3 camTarget = vec3(0.0, 0.0, 0.0);
 const vec3 camUp = vec3(0.0, 1.0, 0.0);
-const float fov = 45.0 * 3.14159 / 180.0;
+const float fov = 70.0 * 3.14159 / 180.0;
 
 // Materials
 struct Material {
@@ -117,7 +117,7 @@ HitInfo sceneSDF(vec3 p){
     // blend factor for material interpolation
     float h = clamp(0.5 + 0.5 * (s2 - s1) / k, 0.0, 1.0);
 
-    float sdP = planeSDF(p - vec3(-0.2));
+    float sdP = planeSDF(p - vec3(0.0));
     float d = d_smooth;
     int id = 1;
     float blend = h;
