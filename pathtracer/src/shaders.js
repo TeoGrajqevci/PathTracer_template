@@ -27,22 +27,39 @@ uniform vec2 u_resolution;
 uniform vec4 u_randomSeed;
 
 uniform vec3 u_cameraPos;
+uniform vec3 u_cameraRot;
+
+uniform vec3 u_lightPos;
+uniform vec2 u_lightSize;
+uniform float u_lightIntensity;
+uniform vec3 u_lightColor;
+
+uniform vec3 u_spherePos;
+uniform float u_sphereRadius;
+uniform vec3 u_sphereAlbedo;
+uniform float u_sphereRoughness;
+uniform float u_sphereMetalness;
+uniform vec3 u_sphereEmissive;
+
+uniform vec3 u_sphere02Pos;
+uniform float u_sphere02Radius;
+uniform vec3 u_sphere02Albedo;
+uniform float u_sphere02Roughness;
+uniform float u_sphere02Metalness;
+uniform vec3 u_sphere02Emissive;
 
 const int MAX_BOUNCES = 6;
 const float EPSILON = 0.0001;
 
 // Light setup
-const vec3 lightPos = vec3(0.0, 3.0, 0.0);
+const vec3 lightPos = vec3(-3.0, 3.0, 0.0);
 const vec2 lightSize = vec2(4.0, 4.0);
-const vec3 lightEmission = vec3(5.0);
+const vec3 lightEmission = vec3(1.0);
 
 // Camera setup
 const vec3 camTarget = vec3(0.0, 0.0, 0.0);
 const vec3 camUp = vec3(0.0, 1.0, 0.0);
 const float fov = 70.0 * 3.14159 / 180.0;
-
-
-
 
 // Materials
 struct Material {
@@ -87,8 +104,8 @@ mat3 calcCameraMatrix(vec3 origin, vec3 target, vec3 up) {
 }
 
 // SDF functions
-float sphereSDF(vec3 p){return length(p - vec3(-1.0, 0.0, 0.0)) - 1.0;}
-float sphere2SDF(vec3 p){return length(p - vec3(1.0, 0.0, 0.0)) - 1.0;}
+float sphereSDF(vec3 p){return length(p - u_sphere02Pos) - u_sphere02Radius;}
+float sphere2SDF(vec3 p){return length(p - u_spherePos) - u_sphereRadius;}
 float planeSDF(vec3 p){return p.y + 1.0;}
 
 // Smooth min function
@@ -152,7 +169,7 @@ vec3 calcNormal(vec3 p) {
 
 SceneHit rayMarch(vec3 ro, vec3 rd){
     float t = 0.0;
-    for(int i=0;i<200;i++){
+    for(int i=0;i< 200;i++){
         vec3 p = ro + rd * t;
         HitInfo h = sceneSDF(p);
         if(h.dist < EPSILON){
@@ -175,14 +192,14 @@ SceneHit rayMarch(vec3 ro, vec3 rd){
 // Material blending
 Material getBlendedMaterial(float blend) {
     Material m;
-    m.albedo      = mix(sphereMat.albedo,       sphereMat2.albedo,       blend);
-    m.roughness   = mix(sphereMat.roughness,    sphereMat2.roughness,    blend);
-    m.metalness   = mix(sphereMat.metalness,    sphereMat2.metalness,    blend);
+    m.albedo      = mix(u_sphereAlbedo,       u_sphere02Albedo,       blend);
+    m.roughness   = mix(u_sphereRoughness,    u_sphere02Roughness,    blend);
+    m.metalness   = mix(u_sphereMetalness,    u_sphere02Metalness,    blend);
     m.ior         = mix(sphereMat.ior,          sphereMat2.ior,          blend);
     m.transmission= mix(sphereMat.transmission, sphereMat2.transmission, blend);
     m.subsurface  = mix(sphereMat.subsurface,   sphereMat2.subsurface,   blend);
     m.anisotropy  = mix(sphereMat.anisotropy,   sphereMat2.anisotropy,   blend);
-    m.emission    = mix(sphereMat.emission,     sphereMat2.emission,     blend);
+    m.emission    = mix(u_sphereEmissive,     u_sphere02Emissive,     blend);
     return m;
 }
 
@@ -272,7 +289,7 @@ vec3 evalBSDF(Material mat, vec3 N, vec3 V, vec3 L, out float pdf){
 }
 
 float areaLightPDF(vec3 Lpos, vec3 hp, vec3 N){
-    float area = lightSize.x * lightSize.y;
+    float area = u_lightSize.x * u_lightSize.y;
     vec3 ld = Lpos - hp;
     float dist2 = dot(ld, ld);
     float dist = sqrt(dist2);
@@ -280,12 +297,12 @@ float areaLightPDF(vec3 Lpos, vec3 hp, vec3 N){
     if(NdotL_light > 0.0) return dist2 / (NdotL_light * area);
     return 0.0;
 }
-vec3 areaLightEmission(vec3 Lpos, vec3 hp){return lightEmission;}
+vec3 areaLightEmission(vec3 Lpos, vec3 hp){return u_lightColor * u_lightIntensity;}
 
 vec3 sampleAreaLight(inout uvec4 seed){
     float r1 = random(seed);
     float r2 = random(seed);
-    vec3 lp = lightPos + vec3((r1 - 0.5) * lightSize.x, 0.0, (r2 - 0.5) * lightSize.y);
+    vec3 lp = u_lightPos + vec3((r1 - 0.5) * u_lightSize.x, 0.0, (r2 - 0.5) * u_lightSize.y);
     return lp;
 }
 
@@ -389,7 +406,7 @@ void main(){
     mat3 cam = calcCameraMatrix(u_cameraPos, camTarget, camUp);
     float fs = tan(fov * 0.5);
 
-    // Jitter for DOF or anti-aliasing
+    // Jitter for anti-aliasing
     float r1 = random(seed) - 0.5;
     float r2 = random(seed) - 0.5;
     float px = (v_uv.x + r1 * (1.0 / u_resolution.x)) * 2.0 - 1.0;
@@ -398,8 +415,8 @@ void main(){
     py *= fs;
 
     vec3 rd = normalize(cam * vec3(px, py, 1.0));
-    // Example extra rotation if desired:
-    rd = rotationX(0.0) * rotationY(0.0) * rotationZ(0.0) * rd;
+
+    rd = rotationX(u_cameraRot.x) * rotationY(u_cameraRot.y) * rotationZ(u_cameraRot.z) * rd;
 
     vec3 ro = u_cameraPos;
     vec3 c = traceRay(seed, ro, rd);

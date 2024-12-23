@@ -1,5 +1,3 @@
-// WebGLApp.js
-
 import {
   vertexShaderSource,
   pathTracerFS,
@@ -315,6 +313,17 @@ class WebGLApp {
     } else {
       console.warn(`Unsupported uniform value type for ${uniformName}`);
     }
+
+    // Reset frame count to restart accumulation
+    this.resetFrameCount();
+  }
+
+  resetFrameCount() {
+    this.frameCount = 0;
+
+    // Clear accumulation textures
+    this.clearTex(this.accumTexA);
+    this.clearTex(this.accumTexB);
   }
 
   //------------------------------------------------------
@@ -457,7 +466,7 @@ class WebGLApp {
   }
 
   //------------------------------------------------------
-  // Clean up resources
+  // Clean up resources (optional)
   //------------------------------------------------------
   destroy() {
     const gl = this.gl;
