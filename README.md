@@ -5,7 +5,7 @@
 
 # ToDo
 
- 1. Fix some issue with the BSDF
+ 1. Fix some issues with the BSDF
  2. Correctly implement subsurface scattering, 
     anistropic and transmission
  3. Other types of lights
