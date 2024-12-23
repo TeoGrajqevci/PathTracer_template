@@ -6,10 +6,12 @@
 # ToDo
 
  1. Fix some issue with the BSDF
- 2. Other types of lights
- 3. Modeling options
- 4. More camera settings
- 5. Fractal formulas
- 6. Image texture
- 7. Environment map
- 8. Atmospheric lighting
+ 2. Correctly implement subsurface scattering, 
+    anistropic and transmission
+ 3. Other types of lights
+ 4. Modeling options
+ 5. More camera settings
+ 6. Fractal formulas
+ 7. Image texture
+ 8. Environment map
+ 9. Atmospheric lighting
