@@ -108,6 +108,11 @@ float sphereSDF(vec3 p){return length(p - u_sphere02Pos) - u_sphere02Radius;}
 float sphere2SDF(vec3 p){return length(p - u_spherePos) - u_sphereRadius;}
 float planeSDF(vec3 p){return p.y + 1.0;}
 
+float roundBoxSDF(vec3 p, vec3 b, float r){
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+
 // Smooth min function
 float smin(float d1, float d2, float k) {
     float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
@@ -130,8 +135,8 @@ struct SceneHit {
 
 // Scene SDF: Smooth union of two spheres (ID=1) and a plane (ID=2)
 HitInfo sceneSDF(vec3 p){
-    float k = 1.0;  // no smoothing
-    float s1 = sphereSDF(p);
+    float k = 0.5;
+    float s1 = roundBoxSDF(p - u_sphere02Pos, vec3(0.7, 0.7, 0.7), 0.3);
     float s2 = sphere2SDF(p);
     float d_smooth = smin(s1, s2, k);
 

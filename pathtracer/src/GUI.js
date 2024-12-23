@@ -114,7 +114,7 @@ export function GUI(app, camera, light, sphere01, sphere02) {
       ]);
     });
 
-  let folder02 = pane.addFolder({ title: "sphere01", expanded: false });
+  let folder02 = pane.addFolder({ title: "sphere", expanded: false });
   folder02
     .addBinding(sphere01, "pos", { label: "Position" })
     .on("change", (value) => {
@@ -163,7 +163,7 @@ export function GUI(app, camera, light, sphere01, sphere02) {
       ]);
     });
 
-  let folder03 = pane.addFolder({ title: "sphere02", expanded: false });
+  let folder03 = pane.addFolder({ title: "box", expanded: false });
   folder03
     .addBinding(sphere02, "pos", { label: "Position" })
     .on("change", (value) => {

@@ -21,7 +21,7 @@ let sphere01 = {
   pos: { x: -1.0, y: 0.0, z: 0.0 },
   radius: 1.0,
   albedo: { r: 255, g: 0, b: 0 },
-  roughness: 0.5,
+  roughness: 0.1,
   metalness: 0.0,
   emissive: { r: 0, g: 0, b: 0 },
 };
@@ -30,7 +30,7 @@ let sphere02 = {
   pos: { x: 1.0, y: 0.0, z: 0.0 },
   radius: 1.0,
   albedo: { r: 0, g: 0, b: 255 },
-  roughness: 0.5,
+  roughness: 0.4,
   metalness: 0.0,
   emissive: { r: 0, g: 0, b: 0 },
 };

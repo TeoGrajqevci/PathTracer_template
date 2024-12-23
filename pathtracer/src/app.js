@@ -36,7 +36,7 @@ class WebGLApp {
     this.setupShaders();
     this.setupBuffers();
     this.setupFramebuffersAndTextures();
-    this.getUniformLocations(); // Updated to fetch all uniforms
+    this.getUniformLocations();
 
     // Handle window resize
     window.addEventListener("resize", this.resizeIfNeeded);
@@ -423,8 +423,8 @@ class WebGLApp {
       this.height
     );
     // Example sigma values (can be adjusted externally if needed)
-    gl.uniform1f(this.uniformLocations.denoise.u_spatialSigma, 2.0);
-    gl.uniform1f(this.uniformLocations.denoise.u_colorSigma, 0.1);
+    gl.uniform1f(this.uniformLocations.denoise.u_spatialSigma, 2.0); // 2.0
+    gl.uniform1f(this.uniformLocations.denoise.u_colorSigma, 0.01); // 0.2
 
     // Bind denoiseTex to framebuffer and render
     gl.framebufferTexture2D(
