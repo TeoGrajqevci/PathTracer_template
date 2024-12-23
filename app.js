@@ -457,7 +457,7 @@ class WebGLApp {
   }
 
   //------------------------------------------------------
-  // Clean up resources (optional)
+  // Clean up resources
   //------------------------------------------------------
   destroy() {
     const gl = this.gl;

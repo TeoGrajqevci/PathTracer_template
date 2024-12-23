@@ -37,10 +37,12 @@ const vec2 lightSize = vec2(4.0, 4.0);
 const vec3 lightEmission = vec3(5.0);
 
 // Camera setup
-const vec3 camPos = vec3(0.0, 0.0, -4.0);
 const vec3 camTarget = vec3(0.0, 0.0, 0.0);
 const vec3 camUp = vec3(0.0, 1.0, 0.0);
 const float fov = 70.0 * 3.14159 / 180.0;
+
+
+
 
 // Materials
 struct Material {
