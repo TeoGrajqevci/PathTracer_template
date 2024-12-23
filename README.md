@@ -5,6 +5,11 @@
 
 # ToDo
 
- 1. Add denoising for true real-time
- 2. Fix some issue with the BSDF
- 3. Implement other types of lights
+ 1. Fix some issue with the BSDF
+ 2. Other types of lights
+ 3. Modeling options
+ 4. More camera settings
+ 5. Fractal formulas
+ 6. Image texture
+ 7. Environment map
+ 8. Atmospheric lighting
