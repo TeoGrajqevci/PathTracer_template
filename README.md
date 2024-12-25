@@ -1,7 +1,8 @@
 # Raymarching PathTracer
  An almost real-time JS/GLSL raymarching + multiple importance sampling pathtracer
 
-<img width="1313" alt="img0" src="https://github.com/user-attachments/assets/0d5ef499-e9dd-402d-b368-42c626205fa3" />
+<img width="1114" alt="img" src="https://github.com/user-attachments/assets/4d2b826d-291a-4dc0-a7f6-a5ca227a0dbe" />
+
 
 # ToDo
 
