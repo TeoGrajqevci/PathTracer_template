@@ -7,6 +7,15 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     camera.pos.z,
   ]);
 
+  app.setUniform("pathTracer", "u_cameraFov", camera.FOV);
+  app.setUniform("pathTracer", "u_cameraAperture", camera.aperture);
+  app.setUniform("pathTracer", "u_cameraFocusDistance", camera.focusDist);
+  app.setUniform("pathTracer", "u_lensDistortionK", [camera.lensDistortion.k1, camera.lensDistortion.k2]);
+ 
+  app.setUniform("pathTracer", "u_chromaticAberration", camera.chromaticAberration);
+  app.setUniform("pathTracer", "u_vignetteStrength", camera.vignette);
+
+
   app.setUniform("pathTracer", "u_cameraRot", [
     camera.rot.x,
     camera.rot.y,
@@ -41,6 +50,13 @@ export function GUI(app, camera, light, sphere01, sphere02) {
   ]);
   app.setUniform("pathTracer", "u_sphereRoughness", sphere01.roughness);
   app.setUniform("pathTracer", "u_sphereMetalness", sphere01.metalness);
+  app.setUniform("pathTracer", "u_sphereSubsurface", sphere01.subsurface);
+  app.setUniform("pathTracer", "u_sphereSubsurfaceRadius", sphere01.subsurfaceRad);
+  app.setUniform("pathTracer", "u_sphereSubsurfaceColor", [
+    sphere01.subsurfaceColor.r / 255,
+    sphere01.subsurfaceColor.g / 255,
+    sphere01.subsurfaceColor.b / 255,
+  ]);
   app.setUniform("pathTracer", "u_sphereEmissive", [
     sphere01.emissive.r / 255,
     sphere01.emissive.g / 255,
@@ -62,6 +78,13 @@ export function GUI(app, camera, light, sphere01, sphere02) {
   ]);
   app.setUniform("pathTracer", "u_sphere02Roughness", sphere02.roughness);
   app.setUniform("pathTracer", "u_sphere02Metalness", sphere02.metalness);
+  app.setUniform("pathTracer", "u_sphere02Subsurface", sphere02.subsurface);
+  app.setUniform("pathTracer", "u_sphere02SubsurfaceRadius", sphere02.subsurfaceRad);
+  app.setUniform("pathTracer", "u_sphere02SubsurfaceColor", [
+    sphere02.subsurfaceColor.r / 255,
+    sphere02.subsurfaceColor.g / 255,
+    sphere02.subsurfaceColor.b / 255,
+  ]);
   app.setUniform("pathTracer", "u_sphere02Emissive", [
     sphere02.emissive.r / 255,
     sphere02.emissive.g / 255,
@@ -70,18 +93,57 @@ export function GUI(app, camera, light, sphere01, sphere02) {
 
   let pane = new Pane();
 
-  let folder01 = pane.addFolder({ title: "Camera" });
-  folder01
-    .addBinding(camera, "pos", { label: "Position" })
-    .on("change", (value) => {
-      app.setUniform("pathTracer", "u_cameraPos", [
-        camera.pos.x,
-        camera.pos.y,
-        camera.pos.z,
-      ]);
-    });
+  let cameraFolder = pane.addFolder({ title: "Camera" , expanded: false});
 
-  let lightFolder = pane.addFolder({ title: "Light" });
+  cameraFolder
+  .addBinding(camera, "FOV", { label: "FOV" })
+  .on("change", (value) => {
+    app.setUniform("pathTracer", "u_cameraFov", camera.FOV);
+  });
+
+  cameraFolder
+  .addBinding(camera, "aperture", { label: "Aperture" })
+  .on("change", (value) => {
+    app.setUniform("pathTracer", "u_cameraAperture", camera.aperture);
+  });
+
+  cameraFolder
+  .addBinding(camera, "focusDist", { label: "Focus Distance" })
+  .on("change", (value) => {
+    app.setUniform("pathTracer", "u_cameraFocusDistance", camera.focusDist);
+  });
+
+  cameraFolder
+  .addBinding(camera, "chromaticAberration", { label: "Chromatic Aberration" })
+  .on("change", (value) => {
+    app.setUniform("pathTracer", "u_chromaticAberration", camera.chromaticAberration);
+  });
+
+  cameraFolder
+  .addBinding(camera.lensDistortion, "k1", { label: "Lens Dist k1" })
+  .on("change", () => {
+    app.setUniform("pathTracer", "u_lensDistortionK", [
+      camera.lensDistortion.k1,
+      camera.lensDistortion.k2,
+    ]);
+  });
+
+  cameraFolder
+  .addBinding(camera.lensDistortion, "k2", { label: "Lens Dist k2" })
+  .on("change", () => {
+    app.setUniform("pathTracer", "u_lensDistortionK", [
+      camera.lensDistortion.k1,
+      camera.lensDistortion.k2,
+    ]);
+  });
+
+  cameraFolder
+  .addBinding(camera, "vignette", { label: "Vignette" })
+  .on("change", (value) => {
+    app.setUniform("pathTracer", "u_vignetteStrength", camera.vignette);
+  });
+
+  let lightFolder = pane.addFolder({ title: "Light", expanded: false });
   lightFolder
     .addBinding(light, "pos", { label: "Position" })
     .on("change", (value) => {
@@ -153,6 +215,28 @@ export function GUI(app, camera, light, sphere01, sphere02) {
       app.setUniform("pathTracer", "u_sphereMetalness", sphere01.metalness);
     });
 
+    folder02
+    .addBinding(sphere01, "subsurface", { min: 0.0, max: 1.0, step: 0.01 })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphereSubsurface", sphere01.subsurface);
+    });
+
+    folder02
+    .addBinding(sphere01, "subsurfaceRad", { min: 0.0, max: 10.0, step: 0.01 })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphereSubsurfaceRadius", sphere01.subsurfaceRad);
+    });
+
+    folder02
+    .addBinding(sphere01, "subsurfaceColor", { label: "Subsurface Color" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphereSubsurfaceColor", [
+        sphere01.subsurfaceColor.r / 255,
+        sphere01.subsurfaceColor.g / 255,
+        sphere01.subsurfaceColor.b / 255,
+      ]);
+    });
+
   folder02
     .addBinding(sphere01, "emissive", { label: "Emissive" })
     .on("change", (value) => {
@@ -200,6 +284,28 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     .addBinding(sphere02, "metalness", { min: 0.02, max: 0.98, step: 0.01 })
     .on("change", (value) => {
       app.setUniform("pathTracer", "u_sphere02Metalness", sphere02.metalness);
+    });
+
+    folder03
+    .addBinding(sphere02, "subsurface", { min: 0.0, max: 1.0, step: 0.01 })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphere02Subsurface", sphere02.subsurface);
+    });
+
+    folder03
+    .addBinding(sphere02, "subsurfaceRad", { min: 0.0, max: 10.0, step: 0.01 })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphere02SubsurfaceRadius", sphere02.subsurfaceRad);
+    });
+
+    folder03 
+    .addBinding(sphere02, "subsurfaceColor", { label: "Subsurface Color" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_sphere02SubsurfaceColor", [
+        sphere02.subsurfaceColor.r / 255,
+        sphere02.subsurfaceColor.g / 255,
+        sphere02.subsurfaceColor.b / 255,
+      ]);
     });
 
   folder03
