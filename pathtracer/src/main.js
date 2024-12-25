@@ -12,7 +12,7 @@ let camera = {
   rot: { x: 0.0, y: 0.0, z: 0.0 },
   FOV : 60.0,
   aperture: 1.0,
-  focusDist: 8.0,
+  focusDist: 8.3,
   lensDistortion: { k1: 0.0, k2: 0.0 },
   chromaticAberration: 0.1,
   vignette: 0.9,
