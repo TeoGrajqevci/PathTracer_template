@@ -93,7 +93,9 @@ export function GUI(app, camera, light, sphere01, sphere02) {
 
   let pane = new Pane();
 
-  let cameraFolder = pane.addFolder({ title: "Camera" , expanded: false});
+  let parameterFolder = pane.addFolder({ title: "Parameter", expanded: false });
+
+  let cameraFolder = parameterFolder.addFolder({ title: "Camera", expanded: false });
 
   cameraFolder
   .addBinding(camera, "FOV", { label: "FOV" })
@@ -143,7 +145,7 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     app.setUniform("pathTracer", "u_vignetteStrength", camera.vignette);
   });
 
-  let lightFolder = pane.addFolder({ title: "Light", expanded: false });
+  let lightFolder = parameterFolder.addFolder({ title: "Light", expanded: false });
   lightFolder
     .addBinding(light, "pos", { label: "Position" })
     .on("change", (value) => {
@@ -176,7 +178,7 @@ export function GUI(app, camera, light, sphere01, sphere02) {
       ]);
     });
 
-  let folder02 = pane.addFolder({ title: "sphere", expanded: false });
+  let folder02 = parameterFolder.addFolder({ title: "sphere", expanded: false });
   folder02
     .addBinding(sphere01, "pos", { label: "Position" })
     .on("change", (value) => {
@@ -247,7 +249,7 @@ export function GUI(app, camera, light, sphere01, sphere02) {
       ]);
     });
 
-  let folder03 = pane.addFolder({ title: "box", expanded: false });
+  let folder03 = parameterFolder.addFolder({ title: "box", expanded: false });
   folder03
     .addBinding(sphere02, "pos", { label: "Position" })
     .on("change", (value) => {
