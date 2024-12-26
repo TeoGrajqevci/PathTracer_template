@@ -230,10 +230,33 @@ float roundBoxSDF(vec3 p, vec3 b, float r){
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
 }
 
+// mandelbulb
+float mandelbulbSDF(vec3 p){
+    vec3 z = p;
+    float dr = 1.0;
+    float r = 0.0;
+    for(int i=0; i<5; i++){
+        r = length(z);
+        if(r>2.0) break;
+        float theta = acos(z.z/r);
+        float phi   = atan(z.y, z.x);
+        dr = pow(r, 8.0)*8.0*dr + 1.0;
+
+        float zr = pow(r, 8.0);
+        theta = theta*8.0;
+        phi   = phi*8.0;
+        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + p;
+    }
+    return 0.5*log(r)*r/dr;
+}
+    
+
 float smin(float d1, float d2, float k) {
     float h = clamp(0.5 + 0.5*(d2 - d1)/k, 0.0, 1.0);
     return mix(d2, d1, h) - k*h*(1.0 - h);
 }
+
+
 
 struct HitInfo {
     float dist;
