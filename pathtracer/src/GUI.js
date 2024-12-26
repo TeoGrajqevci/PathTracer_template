@@ -1,6 +1,6 @@
 import { Pane } from "tweakpane";
 
-export function GUI(app, camera, light, sphere01, sphere02, volume) {
+export function GUI(app, camera, light, ambientLight, sphere01, sphere02, volume) {
 
 ////////////////////////////// CAMERA //////////////////////////////
 
@@ -32,12 +32,26 @@ export function GUI(app, camera, light, sphere01, sphere02, volume) {
     light.pos.y,
     light.pos.z,
   ]);
+  app.setUniform("pathTracer", "u_lightRot", [
+    light.rot.x,
+    light.rot.y,
+    light.rot.z,
+  ]);
   app.setUniform("pathTracer", "u_lightSize", [light.size.x, light.size.y]);
   app.setUniform("pathTracer", "u_lightIntensity", light.intensity);
   app.setUniform("pathTracer", "u_lightColor", [
     light.color.r / 255,
     light.color.g / 255,
     light.color.b / 255,
+  ]);
+
+////////////////////////////// AMBIENT LIGHT //////////////////////////////
+
+  app.setUniform("pathTracer", "u_ambientLightIntensity", ambientLight.intensity);
+  app.setUniform("pathTracer", "u_ambientLightColor", [
+    ambientLight.color.r / 255,
+    ambientLight.color.g / 255,
+    ambientLight.color.b / 255,
   ]);
 
 
@@ -186,6 +200,16 @@ export function GUI(app, camera, light, sphere01, sphere02, volume) {
         light.pos.x,
         light.pos.y,
         light.pos.z,
+      ]);
+    });
+
+    lightFolder
+    .addBinding(light, "rot", { label: "Rotation" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_lightRot", [
+        light.rot.x,
+        light.rot.y,
+        light.rot.z,
       ]);
     });
 

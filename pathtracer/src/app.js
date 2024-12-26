@@ -4,6 +4,7 @@ import {
   accumulateFS,
   denoiseFS,
   displayFS,
+  selectionFS,
 } from "./shaders.js";
 
 class WebGLApp {
@@ -127,6 +128,7 @@ class WebGLApp {
       accumulate: this.createProgram(vertexShaderSource, accumulateFS),
       denoise: this.createProgram(vertexShaderSource, denoiseFS),
       display: this.createProgram(vertexShaderSource, displayFS),
+      selection: this.createProgram(vertexShaderSource, selectionFS),
     };
 
     // Check if all programs were created successfully
@@ -207,6 +209,7 @@ class WebGLApp {
     this.accumTexB = this.createFloatTex(this.width, this.height);
     this.sampleTex = this.createFloatTex(this.width, this.height);
     this.denoiseTex = this.createFloatTex(this.width, this.height);
+    this.selectionTex = this.createFloatTex(this.width, this.height);
 
     // Clear accumulation and denoise textures
     this.clearTex(this.accumTexA);
@@ -489,6 +492,17 @@ class WebGLApp {
     gl.viewport(0, 0, this.width, this.height);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
+    //-----------------------------------------
+    // 5) Selection --> selectionTex (non-affichée)
+    //-----------------------------------------
+    const selProg = this.programs.selection;
+    gl.useProgram(selProg);
+    this.enablePositionAttrib(selProg);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.selectionTex, 0);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
     // Continue the render loop
     requestAnimationFrame(this.render);
   }
@@ -525,6 +539,18 @@ class WebGLApp {
 
     // Remove event listeners
     window.removeEventListener("resize", this.resizeIfNeeded);
+  }
+
+  //------------------------------------------------------
+  // Read selection pixel
+  //------------------------------------------------------
+  readSelectionPixel(x, y) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.selectionTex, 0);
+    const pixels = new Float32Array(4);
+    gl.readPixels(x, this.height - y, 1, 1, gl.RGBA, gl.FLOAT, pixels);
+    return pixels;
   }
 }
 

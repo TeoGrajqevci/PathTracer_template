@@ -51,6 +51,10 @@ uniform vec3  u_lightPos;
 uniform vec2  u_lightSize;
 uniform float u_lightIntensity;
 uniform vec3  u_lightColor;
+uniform vec3  u_lightRot; 
+
+uniform vec3 u_ambientLightColor;
+uniform float u_ambientLightIntensity;
 
 // Sphere #1
 uniform vec3  u_spherePos;
@@ -83,24 +87,21 @@ uniform int   u_sphere02SubsurfaceType;
 // --------------------------------------------------------------------------------------
 // VOLUME (PARTICIPATING MEDIA) UNIFORMS
 // --------------------------------------------------------------------------------------
-// We assume there's a single homogeneous medium in a bounding box or infinite for now.
-
 uniform float u_volumeSigmaA;   // absorption coefficient
 uniform float u_volumeSigmaS;   // scattering coefficient
 uniform float u_volumeG;        // Henyey-Greenstein phase g parameter (-1..1)
 uniform vec3  u_volumeAlbedo;   // color tint for scattering
 uniform vec3  u_volumeEmission; // emissive (e.g., if the volume glows)
 
-// If you want to confine the medium to a region, define a bounding box here:
-const vec3  u_volumeMin = vec3(-10.0, -1.0, -10.0);      // bounding box min
-const vec3  u_volumeMax = vec3( 10.0,  5.0,  10.0);      // bounding box max
+const vec3  u_volumeMin = vec3(-10.0, -1.0, -10.0); // bounding box min
+const vec3  u_volumeMax = vec3( 10.0,  5.0,  10.0); // bounding box max
 const bool  u_enableVolume = true;   // whether volume is active
 
 // --------------------------------------------------------------------------------------
 // CONSTANTS
 // --------------------------------------------------------------------------------------
-const int   MAX_BOUNCES = 6;
-const float EPSILON     = 0.0001;
+const int   MAX_BOUNCES = 8;
+const float EPSILON     = 0.00001;
 const float M_PI        = 3.14159265358979323846;
 
 // Camera
@@ -120,7 +121,7 @@ struct Material {
     float subsurfaceRadius;
     vec3  subsurfaceColor;
     int   subsurfaceType;
-    float anisotropy;    
+    float anisotropy;
     vec3  emission;
 };
 
@@ -502,7 +503,7 @@ vec3 evalBSDF(Material mat, vec3 N, vec3 V, vec3 L, out float pdf){
     float D = D_GGX(N, H, mat.roughness);
     float G = G_SmithGGXCorrelated(NdotV, NdotL, mat.roughness);
     vec3  F = fresnelSchlick(VdotH, F0);
-    vec3  spec = (D * G * F)/(4.0*NdotV*NdotL + 0.0001);
+    vec3  spec = (D * G * F)/(3.0*NdotV*NdotL + 0.0001);
 
     // SSS
     vec3 sssLobe = vec3(0.0);
@@ -531,33 +532,69 @@ vec3 evalBSDF(Material mat, vec3 N, vec3 V, vec3 L, out float pdf){
 }
 
 // --------------------------------------------------------------------------------------
+// HELPER: CREATE LIGHT ROTATION + NORMAL
+// --------------------------------------------------------------------------------------
+mat3 buildLightRotation(vec3 rot){
+    // You can choose to interpret rot in degrees or radians.
+    // Here, we assume they are in radians:
+    return rotationX(rot.x) * rotationY(rot.y) * rotationZ(rot.z);
+}
+
+// --------------------------------------------------------------------------------------
 // AREA LIGHT
 // --------------------------------------------------------------------------------------
 float areaLightPDF(vec3 Lpos, vec3 hp, vec3 N){
-    float area  = u_lightSize.x * u_lightSize.y;
-    vec3  ld    = Lpos - hp;
+    // 1) Compute the direction from hit point to light point
+    vec3 ld    = Lpos - hp;
     float dist2 = dot(ld, ld);
     float dist  = sqrt(dist2);
-    float NdotL_light = max(dot(normalize(ld), vec3(0.0,1.0,0.0)), 0.0);
-    if(NdotL_light>0.0){
-        return dist2/(NdotL_light*area);
+
+    // 2) The area of the rectangle is just .x * .y
+    //    The normal is rotated from the local (0,1,0) by u_lightRot.
+    float area  = u_lightSize.x * u_lightSize.y;
+
+    // 3) The light's normal after rotation:
+    mat3 lRot = buildLightRotation(u_lightRot);
+    vec3 lightNormal = lRot * vec3(0.0, 1.0, 0.0);
+
+    // 4) Evaluate the geometric term for sampling
+    float NdotL_light = max(dot(normalize(ld), lightNormal), 0.0);
+    if(NdotL_light > 0.0){
+        // dist2 / (NdotL_light * area)
+        return dist2/(NdotL_light * area);
     }
     return 0.0;
 }
 
 vec3 areaLightEmission(vec3 Lpos, vec3 hp){
+    // You can do a falloff if you want, or keep it constant:
     return u_lightColor * u_lightIntensity;
 }
 
 vec3 sampleAreaLight(inout uvec4 seed){
+    // 1) Sample random in [0..1]
     float r1 = random(seed);
     float r2 = random(seed);
-    vec3 lp = u_lightPos + vec3(
-        (r1 - 0.5)*u_lightSize.x,
+
+    // 2) Compute local coordinates in the rectangle's local plane
+    //    We assume the rectangle is local XY or XZ. In this code, it's effectively:
+    //    width along X, length along Z (like the original code).
+    //    That was: (x, 0, z). Let’s keep that approach but define an offset along XZ.
+    //    We can also place the rectangle in XY or XZ, but let's be consistent
+    //    with how the PDF was originally done. The code used: (x, 0, z).
+    vec3 localPos = vec3(
+        (r1 - 0.5)*u_lightSize.x, 
          0.0,
         (r2 - 0.5)*u_lightSize.y
     );
-    return lp;
+
+    // 3) Rotate that localPos by the light rotation
+    mat3 lRot = buildLightRotation(u_lightRot);
+    vec3 rotatedLocal = lRot * localPos;
+
+    // 4) Translate by the light's world position
+    vec3 pos = u_lightPos + rotatedLocal;
+    return pos;
 }
 
 // --------------------------------------------------------------------------------------
@@ -579,12 +616,11 @@ vec2 distortUV(vec2 uv, float k1, float k2){
 }
 
 // --------------------------------------------------------------------------------------
-// VOLUME FUNCTIONS (LAFORTUNE & WILLEMS - STYLE)
+// VOLUME FUNCTIONS
 // --------------------------------------------------------------------------------------
 
 // 1) Check if a ray intersects the volume bounding box.
 bool intersectsVolumeBBox(vec3 ro, vec3 rd, out float tmin, out float tmax){
-    // Slab method
     vec3 invR = vec3(1.0/rd.x, 1.0/rd.y, 1.0/rd.z);
     vec3 t0s = (u_volumeMin - ro)*invR;
     vec3 t1s = (u_volumeMax - ro)*invR;
@@ -598,16 +634,12 @@ bool intersectsVolumeBBox(vec3 ro, vec3 rd, out float tmin, out float tmax){
 }
 
 // 2) Sample distance to the next scattering event (homogeneous medium).
-//    p(t) = sigma_t * exp(-sigma_t * t)
 float sampleDistance(inout uvec4 seed, float sigma_t){
     float xi = random(seed);
-    // t = -ln(1 - xi) / sigma_t  => we can use xi directly
-    // Often we do  t = -log(xi)/sigma_t
     return -log(xi)/sigma_t;
 }
 
 // 3) Henyey-Greenstein phase function sampling
-//    p(cosTheta) = (1 - g^2) / (4π(1 + g^2 - 2g cosTheta)^(3/2))
 vec3 samplePhaseHenyeyGreenstein(vec3 w, float g, inout uvec4 seed){
     float xi1 = random(seed);
     float xi2 = random(seed);
@@ -632,13 +664,10 @@ vec3 samplePhaseHenyeyGreenstein(vec3 w, float g, inout uvec4 seed){
 
     // direction in local spherical coords
     vec3 dLocal = vec3(cp*sinTheta, sp*sinTheta, cosTheta);
-
-    // transform back to world
     return normalize(dLocal.x*t + dLocal.y*b + dLocal.z*w);
 }
 
-// 4) Evaluate the transmittance (for homogeneous medium):
-//    T = exp(-sigma_t * d)
+// 4) Evaluate the transmittance
 float transmittance(float sigma_t, float dist){
     return exp(-sigma_t*dist);
 }
@@ -646,7 +675,6 @@ float transmittance(float sigma_t, float dist){
 // --------------------------------------------------------------------------------------
 // PATH TRACING WITH VOLUME
 // --------------------------------------------------------------------------------------
-
 struct MediumInteraction {
     bool  happened;
     vec3  position;
@@ -669,16 +697,12 @@ MediumInteraction sampleVolumeInteraction(vec3 ro, vec3 rd, inout uvec4 seed){
         return mi; 
     }
 
-    // Move to tmin if needed
     float tstart = max(tmin, 0.0);
     vec3 pStart = ro + rd*tstart;
-    
-    // total extinction
+
     float sigma_t = u_volumeSigmaA + u_volumeSigmaS;
-    // sample distance
     float distSample = sampleDistance(seed, sigma_t);
 
-    // If distSample < (tmax - tstart), we have a scattering event
     if(distSample < (tmax - tstart)){
         mi.happened     = true;
         mi.distTraveled = distSample;
@@ -688,10 +712,6 @@ MediumInteraction sampleVolumeInteraction(vec3 ro, vec3 rd, inout uvec4 seed){
     return mi;
 }
 
-// A combined function that checks surface and volume:
-// We look for whichever is encountered first. If the volume scattering
-// event is nearer than a surface, we do volumetric scattering. 
-// Otherwise, we do surface intersection.
 bool traceNextEvent(
     vec3 ro,
     vec3 rd,
@@ -704,44 +724,31 @@ bool traceNextEvent(
     mediumHit  = sampleVolumeInteraction(ro, rd, seed);
 
     if(!surfaceHit.hit && !mediumHit.happened){
-        // no surface, no volume scattering => no event
-        travelDist = 50.0; // or something large
+        travelDist = 50.0; 
         return false;
     }
 
-    // If volume scattering happened:
     if(mediumHit.happened){
-        float distVolume = 0.0;
-        // distance from ro to mediumHit
-        // we have to find the actual param t along rd
-        // we already computed tstart + distSample
-        // but let's do it carefully:
-        // We know we started at ro and the scattering is at mediumHit.position
         vec3 delta = mediumHit.position - ro;
-        distVolume = length(delta);
+        float distVolume = length(delta);
 
         if(surfaceHit.hit){
             vec3 surfDelta = surfaceHit.pos - ro;
             float distSurf = length(surfDelta);
             if(distVolume < distSurf){
-                // volume is first
                 travelDist = distVolume;
-                surfaceHit.hit = false; // disregard surface
+                surfaceHit.hit = false; 
                 return true;
             } else {
-                // surface is first
                 mediumHit.happened = false;
                 travelDist = distSurf;
                 return true;
             }
         } else {
-            // no surface, volume only
             travelDist = distVolume;
             return true;
         }
     } else {
-        // no volume scattering, but we do have a surface
-        // or maybe none, if both are false, handled above
         if(surfaceHit.hit){
             vec3 delta = surfaceHit.pos - ro;
             float distSurf = length(delta);
@@ -753,59 +760,44 @@ bool traceNextEvent(
     return false;
 }
 
-// The final path tracer that does surface + volumetric scattering
 vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
     vec3 L  = vec3(0.0);
     vec3 tp = vec3(1.0);
 
     float sigmaA = u_volumeSigmaA;
     float sigmaS = u_volumeSigmaS;
-    float sigmaT = sigmaA + sigmaS; // extinction
+    float sigmaT = sigmaA + sigmaS;
 
     for(int bounce=0; bounce<MAX_BOUNCES; bounce++){
-        // Find next event (surface or medium)
         SceneHit   surfHit;
         MediumInteraction medHit;
         float travelDist = 0.0;
         bool foundSomething = traceNextEvent(ro, rd, seed, surfHit, medHit, travelDist);
 
-        // If nothing found => environment 
         if(!foundSomething){
-            // e.g. add environment color if you want
-            // L += vec3(0.8, 0.9, 1.0) * tp;
+            // Example environment => can add something if desired
+             L += (u_ambientLightColor * u_ambientLightIntensity) * tp;
             break;
         }
 
-        // Attenuate for traveling 'travelDist' in the medium
         if(u_enableVolume){
             float Tr = transmittance(sigmaT, travelDist);
             tp *= Tr;
         }
 
-        // Check if we have a medium interaction (volumetric scattering)
         if(medHit.happened){
-            // We are inside the volume. Possibly we have volumetric emission:
             vec3 volEmis = u_volumeEmission;
             if(length(volEmis) > 0.0){
-                // Add emission
                 L += tp * volEmis;
             }
 
-            // Next-event estimation from volume:
-            // We can sample the area light and see if the segment is unoccluded.
             {
                 vec3 lpos   = sampleAreaLight(seed);
                 vec3 ldir   = normalize(lpos - medHit.position);
                 float ldist = length(lpos - medHit.position);
 
-                // We must check both surfaces and another volume event:
-                // For simplicity, let's do a quick shadow check ignoring volume scattering:
-                // or you can do a transmittance factor along ldir to light
                 float T_toLight = 1.0;
                 if(u_enableVolume){
-                    // compute transmittance to the light ignoring additional volume scattering events:
-                    // integrated transmittance in homogeneous medium is exp(-sigmaT * dist).
-                    // Then do a surface check:
                     SceneHit sh = rayMarch(medHit.position + ldir*EPSILON, ldir);
                     float planeDist = 9999.0;
                     if(sh.hit){
@@ -814,11 +806,9 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
                     if(planeDist < (ldist - EPSILON)){
                         T_toLight = 0.0; 
                     } else {
-                        // no surface block => volume attenuation
                         T_toLight = transmittance(sigmaT, ldist);
                     }
                 } else {
-                    // fallback if volume not enabled
                     SceneHit sh = rayMarch(medHit.position + ldir*EPSILON, ldir);
                     if(sh.hit){
                         float blockDist = length(sh.pos - medHit.position);
@@ -829,87 +819,45 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
                 }
 
                 float dpl = areaLightPDF(lpos, medHit.position, vec3(0.0,1.0,0.0));
-                // Phase function
-                vec3 w = -rd; // incoming direction
-                vec3 pf = vec3(1.0); // default isotropic or HG
-                if(abs(u_volumeG) < 1e-3){
-                    // isotropic
-                    pf = vec3(1.0/(4.0*M_PI));
-                } else {
-                    // Evaluate Henyey-Greenstein
+                vec3 w = -rd;
+                vec3 pf = vec3(1.0/(4.0*M_PI)); // isotropic default
+
+                if(abs(u_volumeG) > 1e-3){
                     float cosTheta = dot(w, ldir);
                     float g = u_volumeG;
                     float denom = 1.0 + g*g - 2.0*g*cosTheta;
                     pf = vec3((1.0 - g*g)/(4.0*M_PI*pow(denom,1.5)));
                 }
 
-                // dpl can be 0 if degenerate geometry
-                if(dpl > 0.0 && T_toLight > 0.0){
+                if(dpl > 0.0 && T_toLight > 1e-8){
                     vec3 Le = areaLightEmission(lpos, medHit.position);
-                    // Next-event weighting via MIS:
-                    // For volumes, the pdf to sample direction is just the phase function * 1 over 4π or so,
-                    // but let's keep it simple.
-                    float pdf_phase = 1.0/(4.0*M_PI);
-                    if(abs(u_volumeG) > 1e-3){
-                        // we'd do a real phase pdf, but let's keep it conceptual
-                        // The real PDF if sampling phase is the same formula as pf * 4π, etc.
-                        // not simplifying => let's do it properly:
-                        // p(ω) = HG(...) => integral is 1 => the pdf is exactly that same formula if normalized
-                        // We already store that in pf. Let’s define pdf_phase = scalar version:
-                        pdf_phase = pf.x; // if the phase is R, G, B same => just use .x
-                    }
-                    // combined pdf = area light pdf + phase pdf => MIS
+                    float pdf_phase = pf.x; 
                     float mis = dpl / (dpl + pdf_phase + 1e-8);
-
                     L += tp * sigmaS * pf * Le * T_toLight * mis / (dpl+1e-8);
                 }
             }
 
-            // Now pick a new direction from the phase function
-            vec3 newDir = vec3(0.0);
             {
-                newDir = samplePhaseHenyeyGreenstein(-rd, u_volumeG, seed);
-            }
+                vec3 newDir = samplePhaseHenyeyGreenstein(-rd, u_volumeG, seed);
+                tp *= sigmaS * u_volumeAlbedo;
 
-            // Phase function factor
-            // For the next bounce, the throughput is multiplied by:
-            //   tp *= sigmaS * p( newDir ) / pdf( newDir )  
-            // But if we sample from the phase function, the pdf is exactly the same as the phase function, so they cancel out, leaving sigmaS. 
-            // If we do color-based albedo in the medium, we multiply that in as well:
-            float phasePDF = 1.0/(4.0*M_PI);
-            if(abs(u_volumeG) > 1e-3){
-                // Evaluate HG at cosTheta=dot(-rd,newDir)
-                float cosTheta = dot(-rd, newDir);
-                float g = u_volumeG;
-                float denom = 1.0 + g*g - 2.0*g*cosTheta;
-                float pfVal = (1.0 - g*g)/(4.0*M_PI*pow(denom,1.5));
-                phasePDF = pfVal; 
-            }
-            // Because we used the same function to sample, pfVal ~ pdf. 
-            // So the ratio pfVal / pdf ~ 1.0, ignoring any color variation. 
-            // We'll do a simpler approach:
-            tp *= sigmaS * u_volumeAlbedo; 
-            
-            // Russian roulette
-            float rrProb = 0.9;
-            if(random(seed) > rrProb){
-                break;
-            }
-            tp /= rrProb;
+                float rrProb = 0.9;
+                if(random(seed) > rrProb){
+                    break;
+                }
+                tp /= rrProb;
 
-            ro = medHit.position + newDir*EPSILON;
-            rd = newDir;
+                ro = medHit.position + newDir*EPSILON;
+                rd = newDir;
+            }
         }
         else {
-            // We hit a surface
-            // If there's emission:
             Material mat = getMaterial(surfHit.id, surfHit.blend);
             if(length(mat.emission)>0.0){
                 L += tp*mat.emission;
                 break;
             }
 
-            // Next-event from surface
             {
                 vec3 lpos   = sampleAreaLight(seed);
                 vec3 ldir   = normalize(lpos - surfHit.pos);
@@ -922,25 +870,23 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
                 vec3 bsdfVal= evalBSDF(mat, surfHit.normal, -rd, ldir, dpb);
                 float NdotL = max(dot(surfHit.normal, ldir), 0.0);
 
-                // Volume check for shadows
                 float T_vol = 1.0;
                 if(u_enableVolume && unsh){
-                    // check if the ray from surfHit.pos to lpos passes in the volume
-                    // We do a quick bounding box test, then multiply by transmittance
                     float tminBB, tmaxBB;
                     bool volInt = intersectsVolumeBBox(surfHit.pos + surfHit.normal*EPSILON, ldir, tminBB, tmaxBB);
                     if(volInt){
-                        // compute intersection with the bounding box
                         float distLight = length(lpos - surfHit.pos);
                         float entryT = max(tminBB, 0.0);
                         float exitT  = tmaxBB;
 
                         if(exitT > entryT) {
-                            // segment length in the volume
                             float segLength = min(distLight, exitT) - entryT;
-                            // approximate transmittance
                             T_vol = exp(-sigmaT*segLength);
                         }
+                    }
+                } else {
+                    if(unsh){
+                        // no additional volume block
                     }
                 }
 
@@ -951,9 +897,8 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
                 }
             }
 
-            // Next bounce from BSDF
-            vec3 ndir;
             {
+                vec3 ndir;
                 float clobe = random(seed);
                 float diffW = (1.0 - mat.metalness)*(1.0 - mat.transmission) + mat.subsurface;
                 bool pickDiffuse = (clobe<0.5 && diffW>0.0);
@@ -968,36 +913,33 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
                     vec3 H = sampleGGXHemisphere(surfHit.normal, mat.roughness, r1, r2);
                     ndir    = reflect(-rd, H);
                 }
+
+                float npdf;
+                vec3 be = evalBSDF(mat, surfHit.normal, -rd, ndir, npdf);
+                float NdotNext = max(dot(surfHit.normal, ndir), 0.0);
+                if(npdf<1e-7 || NdotNext<EPSILON){
+                    break;
+                }
+
+                float rrProb = 0.9;
+                if(random(seed) > rrProb){
+                    break;
+                }
+                be /= rrProb;
+
+                tp *= be*(NdotNext/npdf);
+
+                ro = surfHit.pos + surfHit.normal*EPSILON;
+                rd = ndir;
             }
 
-            float npdf;
-            vec3 be = evalBSDF(mat, surfHit.normal, -rd, ndir, npdf);
-            float NdotNext = max(dot(surfHit.normal, ndir), 0.0);
-            if(npdf<1e-7 || NdotNext<EPSILON){
+            if(dot(tp, tp) > 10000.0){
                 break;
             }
-
-            // Russian roulette
-            float rrProb = 0.9;
-            if(random(seed) > rrProb){
-                break;
-            }
-            be /= rrProb;
-
-            tp *= be*(NdotNext/npdf);
-
-            ro = surfHit.pos + surfHit.normal*EPSILON;
-            rd = ndir;
-        }
-
-        // Safeguard to avoid infinite bright
-        if(dot(tp, tp) > 10000.0){
-            break;
         }
     }
 
-    // clamp final
-    return min(L, vec3(10.0));
+    return min(L, vec3(20.0));
 }
 
 // --------------------------------------------------------------------------------------
@@ -1005,17 +947,13 @@ vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
 // --------------------------------------------------------------------------------------
 void main()
 {
-    // Build seed
     vec4 sb  = u_randomSeed + vec4(v_uv, float(u_frameCount), u_time);
     uvec4 seed = seedFromVec4(sb);
 
-    // Build camera
     float aspect = u_resolution.x / u_resolution.y;
     mat3 cam     = calcCameraMatrix(u_cameraPos, camTarget, camUp);
     float fs     = tan((u_cameraFov * M_PI / 180.0)*0.5);
 
-    // Get uv in [-1..1], center-based
-    // Also add random subpixel offset for AA
     float rx = random(seed) - 0.5;
     float ry = random(seed) - 0.5;
     vec2 uvCenter = vec2(v_uv.x + rx*(1.0/u_resolution.x),
@@ -1023,7 +961,6 @@ void main()
     vec2 uv = uvCenter * 2.0 - 1.0;
     uv.x *= aspect;
 
-    // We'll do three separate rays for R/G/B, with slight lens-dist changes
     float halfCA = 0.5 * u_chromaticAberration;
     float rColor, gColor, bColor;
 
@@ -1093,16 +1030,15 @@ void main()
         bColor = traceRay(seed, ro, rd).b;
     }
 
-    // Combine
     vec3 finalColor = vec3(rColor, gColor, bColor);
 
-    // Vignette
     float distFromCenter = length(uv);
     float vig = 1.0 - clamp(distFromCenter * u_vignetteStrength, 0.0, 1.0);
     finalColor *= vig;
 
     outColor = vec4(finalColor, 1.0);
 }
+
 
 `;
 
@@ -1215,3 +1151,14 @@ void main(){
     outColor = vec4(gammaColor, 1.0);
 }
 `;
+
+//
+// 6) Selection Fragment Shader
+//
+export const selectionFS = `#version 300 es
+precision highp float;
+out vec4 outColor;
+void main() {
+    // ...logic de picking...
+    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+}`;

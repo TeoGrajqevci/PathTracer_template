@@ -11,10 +11,10 @@ let camera = {
   pos: { x: -5.0, y: 2.0, z: 7.0 },
   rot: { x: 0.0, y: 0.0, z: 0.0 },
   FOV : 60.0,
-  aperture: 1.0,
+  aperture: 0.0,
   focusDist: 8.3,
   lensDistortion: { k1: 0.0, k2: 0.0 },
-  chromaticAberration: 0.1,
+  chromaticAberration: 0.0,
   vignette: 0.65,
   angle: 0.0, // Angle for horizontal movement
   height: 0.0, // Vertical height offset
@@ -23,9 +23,15 @@ let camera = {
 
 let light = {
   pos: { x: -0.8, y: 3.7, z: -4.8 },
-  size: { x: 4.0, y: 4.0 },
-  intensity: 120.0,
+  rot: { x: -0.4, y: 0.3, z: -1.2 },
+  size: { x: 4.0, y: 1.7 },
+  intensity: 450.0,
   color: { r: 255, g: 255, b: 255 },
+};
+
+let ambientLight = {
+  intensity: 0.0,
+  color: { r: 135, g: 206, b: 235 },
 };
 
 let volume = {
@@ -35,7 +41,6 @@ let volume = {
   albedo: { r: 255, g: 255, b: 255 },
   emissive: { r: 0, g: 0, b: 0 },
 };
-
 
 let sphere01 = {
   pos: { x: -0.3, y: 0.0, z: 0.0 },
@@ -61,7 +66,7 @@ let sphere02 = {
   emissive: { r: 0, g: 0, b: 0 },
 };
 
-let gui = new GUI(app, camera, light, sphere01, sphere02, volume);
+let gui = new GUI(app, camera, light, ambientLight, sphere01, sphere02, volume);
 
 // Interaction state
 let isDragging = false;
@@ -156,3 +161,11 @@ window.addEventListener("mousemove", onMouseMove);
 window.addEventListener("mouseup", onMouseUp);
 window.addEventListener("wheel", onWheel);
 window.addEventListener("keydown", onKeyDown);
+
+canvas.addEventListener("click", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  const color = app.readSelectionPixel(mouseX, mouseY);
+  console.log("Picked color:", color);
+});
