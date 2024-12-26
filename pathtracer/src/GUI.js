@@ -1,6 +1,9 @@
 import { Pane } from "tweakpane";
 
-export function GUI(app, camera, light, sphere01, sphere02) {
+export function GUI(app, camera, light, sphere01, sphere02, volume) {
+
+////////////////////////////// CAMERA //////////////////////////////
+
   app.setUniform("pathTracer", "u_cameraPos", [
     camera.pos.x,
     camera.pos.y,
@@ -22,6 +25,8 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     camera.rot.z,
   ]);
 
+////////////////////////////// LIGHT //////////////////////////////
+
   app.setUniform("pathTracer", "u_lightPos", [
     light.pos.x,
     light.pos.y,
@@ -34,6 +39,27 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     light.color.g / 255,
     light.color.b / 255,
   ]);
+
+
+  ////////////////////////////// VOLUME //////////////////////////////
+
+  app.setUniform("pathTracer", "u_volumeSigmaA", volume.absorbtion);
+  app.setUniform("pathTracer", "u_volumeSigmaS", volume.scattering);
+  app.setUniform("pathTracer", "u_volumeG", volume.scatteringAnisotropy);
+  app.setUniform("pathTracer", "u_volumeAlbedo", [
+    volume.albedo.r / 255,
+    volume.albedo.g / 255,
+    volume.albedo.b / 255,
+  ]);
+  app.setUniform("pathTracer", "u_volumeEmission", [
+    volume.emissive.r / 255,
+    volume.emissive.g / 255,
+    volume.emissive.b / 255,
+  ]);
+
+
+
+////////////////////////////// SPHERE //////////////////////////////
 
   app.setUniform("pathTracer", "u_spherePos", [
     sphere01.pos.x,
@@ -91,9 +117,13 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     sphere02.emissive.b / 255,
   ]);
 
+  ////////////////////////////// GUI //////////////////////////////
+
   let pane = new Pane();
 
   let parameterFolder = pane.addFolder({ title: "Parameter", expanded: false });
+
+  ////////////////////////////// CAMERA //////////////////////////////
 
   let cameraFolder = parameterFolder.addFolder({ title: "Camera", expanded: false });
 
@@ -145,6 +175,9 @@ export function GUI(app, camera, light, sphere01, sphere02) {
     app.setUniform("pathTracer", "u_vignetteStrength", camera.vignette);
   });
 
+
+  ////////////////////////////// LIGHT //////////////////////////////
+
   let lightFolder = parameterFolder.addFolder({ title: "Light", expanded: false });
   lightFolder
     .addBinding(light, "pos", { label: "Position" })
@@ -177,6 +210,53 @@ export function GUI(app, camera, light, sphere01, sphere02) {
         light.color.b / 255,
       ]);
     });
+
+  ////////////////////////////// VOLUME //////////////////////////////
+
+  let volumeFolder = parameterFolder.addFolder({ title: "Volume", expanded: false });
+
+  volumeFolder
+    .addBinding(volume, "absorbtion", { label: "Absorbtion" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_volumeSigmaA", volume.absorbtion);
+    });
+
+  volumeFolder
+    .addBinding(volume, "scattering", { label: "Scattering" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_volumeSigmaS", volume.scattering);
+    });
+
+  volumeFolder
+    .addBinding(volume, "scatteringAnisotropy", { label: "Anisotropy" , min: -1.0, max: 1.0, step: 0.01})
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_volumeG", volume.scatteringAnisotropy);
+    });
+
+  volumeFolder
+    .addBinding(volume, "albedo", { label: "Albedo" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_volumeAlbedo", [
+        volume.albedo.r / 255,
+        volume.albedo.g / 255,
+        volume.albedo.b / 255,
+      ]);
+    });
+
+  volumeFolder
+    .addBinding(volume, "emissive", { label: "Emissive" })
+    .on("change", (value) => {
+      app.setUniform("pathTracer", "u_volumeEmission", [
+        volume.emissive.r / 255,
+        volume.emissive.g / 255,
+        volume.emissive.b / 255,
+      ]);
+    });
+
+
+
+
+  ////////////////////////////// SPHERE //////////////////////////////
 
   let folder02 = parameterFolder.addFolder({ title: "sphere", expanded: false });
   folder02

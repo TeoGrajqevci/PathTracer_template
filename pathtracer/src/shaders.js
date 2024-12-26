@@ -18,12 +18,15 @@ void main() {
 export const pathTracerFS = `#version 300 es
 precision highp float;
 
+// --------------------------------------------------------------------------------------
+// VARYINGS
+// --------------------------------------------------------------------------------------
 in vec2 v_uv;
 out vec4 outColor;
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // UNIFORMS
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 uniform float u_time;
 uniform int   u_frameCount;
 uniform vec2  u_resolution;
@@ -38,11 +41,10 @@ uniform float u_cameraFov;
 uniform float u_cameraAperture;       // Aperture diameter
 uniform float u_cameraFocusDistance;  // Focus plane distance
 
-// --- NEW LENS + VIGNETTE + CHROMA ABERRATION ---
-uniform vec2 u_lensDistortionK;    // primary radial distortion factor
-
-uniform float u_chromaticAberration; // how much channels separate (aberration)
-uniform float u_vignetteStrength;    // how quickly corners darken
+// Lens + vignette + chromatic aberration
+uniform vec2  u_lensDistortionK;      // primary radial distortion factors (k1, k2)
+uniform float u_chromaticAberration;  // how much channels separate
+uniform float u_vignetteStrength;     // how quickly corners darken
 
 // Light
 uniform vec3  u_lightPos;
@@ -57,6 +59,7 @@ uniform vec3  u_sphereAlbedo;
 uniform float u_sphereRoughness;
 uniform float u_sphereMetalness;
 uniform vec3  u_sphereEmissive;
+
 // Subsurface for sphere #1
 uniform float u_sphereSubsurface;         
 uniform float u_sphereSubsurfaceRadius;  
@@ -70,41 +73,58 @@ uniform vec3  u_sphere02Albedo;
 uniform float u_sphere02Roughness;
 uniform float u_sphere02Metalness;
 uniform vec3  u_sphere02Emissive;
+
 // Subsurface for sphere #2
 uniform float u_sphere02Subsurface;       
 uniform float u_sphere02SubsurfaceRadius; 
 uniform vec3  u_sphere02SubsurfaceColor;  
 uniform int   u_sphere02SubsurfaceType;   
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
+// VOLUME (PARTICIPATING MEDIA) UNIFORMS
+// --------------------------------------------------------------------------------------
+// We assume there's a single homogeneous medium in a bounding box or infinite for now.
+
+uniform float u_volumeSigmaA;   // absorption coefficient
+uniform float u_volumeSigmaS;   // scattering coefficient
+uniform float u_volumeG;        // Henyey-Greenstein phase g parameter (-1..1)
+uniform vec3  u_volumeAlbedo;   // color tint for scattering
+uniform vec3  u_volumeEmission; // emissive (e.g., if the volume glows)
+
+// If you want to confine the medium to a region, define a bounding box here:
+const vec3  u_volumeMin = vec3(-10.0, -1.0, -10.0);      // bounding box min
+const vec3  u_volumeMax = vec3( 10.0,  5.0,  10.0);      // bounding box max
+const bool  u_enableVolume = true;   // whether volume is active
+
+// --------------------------------------------------------------------------------------
 // CONSTANTS
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 const int   MAX_BOUNCES = 6;
 const float EPSILON     = 0.0001;
 const float M_PI        = 3.14159265358979323846;
 
 // Camera
-const vec3 camTarget = vec3(0.0, 0.0, 0.0);
-const vec3 camUp     = vec3(0.0, 1.0, 0.0);
+const vec3  camTarget = vec3(0.0, 0.0, 0.0);
+const vec3  camUp     = vec3(0.0, 1.0, 0.0);
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // MATERIAL STRUCT
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 struct Material {
     vec3  albedo;
     float roughness;
     float metalness;
     float ior;
-    float transmission; // not used much here, left for completeness
+    float transmission;
     float subsurface;
     float subsurfaceRadius;
     vec3  subsurfaceColor;
     int   subsurfaceType;
-    float anisotropy;
+    float anisotropy;    
     vec3  emission;
 };
 
-Material sphereMat  = Material(
+Material sphereMat = Material(
     vec3(0.9, 0.0, 0.0),
     0.1,
     0.0,
@@ -132,7 +152,7 @@ Material sphereMat2 = Material(
     vec3(0.0)
 );
 
-Material planeMat   = Material(
+Material planeMat = Material(
     vec3(0.8, 0.8, 0.8),
     0.5,
     0.0,
@@ -146,9 +166,9 @@ Material planeMat   = Material(
     vec3(0.0)
 );
 
-// -----------------------------------------------------
-// PRNG (hash-based)
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
+// PRNG (hash-based) 
+// --------------------------------------------------------------------------------------
 uint hash_uvec4(uvec4 x) {
     x = (x ^ (x >> 17U)) * 0xED5AD4BBU;
     x = (x ^ (x >> 11U)) * 0xAC4C1B51U;
@@ -157,7 +177,7 @@ uint hash_uvec4(uvec4 x) {
 }
 
 float random(inout uvec4 seed) {
-    seed.x += 0x9E3779B9U;
+    seed.x += 0x9E3779B9U;      // Knuth's constant
     seed = uvec4(hash_uvec4(seed));
     return float(seed.x) / 4294967295.0;
 }
@@ -171,9 +191,9 @@ uvec4 seedFromVec4(vec4 v){
     );
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // CAMERA + ROTATION
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 mat3 calcCameraMatrix(vec3 origin, vec3 target, vec3 up) {
     vec3 fw = normalize(target - origin);
     vec3 r  = normalize(cross(fw, up));
@@ -195,9 +215,9 @@ mat3 rotationY(float angle) {
     float c = cos(angle);
     float s = sin(angle);
     return mat3(
-        c,   0.0, s,
-        0.0, 1.0, 0.0,
-       -s,   0.0, c
+         c,  0.0,  s,
+         0.0,1.0, 0.0,
+        -s,  0.0,  c
     );
 }
 
@@ -205,15 +225,15 @@ mat3 rotationZ(float angle) {
     float c = cos(angle);
     float s = sin(angle);
     return mat3(
-        c, -s, 0.0,
-        s,  c, 0.0,
-        0.0, 0.0, 1.0
+         c, -s, 0.0,
+         s,  c, 0.0,
+        0.0,0.0,1.0
     );
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // SDF SCENE
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 float sphere2SDF(vec3 p) {
     return length(p - u_spherePos) - u_sphereRadius;
 }
@@ -224,13 +244,13 @@ float planeSDF(vec3 p) {
     return p.y + 1.0;
 }
 
-// A round box just as an extra shape example
+// Example round box
 float roundBoxSDF(vec3 p, vec3 b, float r){
     vec3 q = abs(p) - b;
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
 }
 
-// mandelbulb
+// A fractal or something else
 float mandelbulbSDF(vec3 p){
     vec3 z = p;
     float dr = 1.0;
@@ -249,15 +269,13 @@ float mandelbulbSDF(vec3 p){
     }
     return 0.5*log(r)*r/dr;
 }
-    
 
 float smin(float d1, float d2, float k) {
     float h = clamp(0.5 + 0.5*(d2 - d1)/k, 0.0, 1.0);
     return mix(d2, d1, h) - k*h*(1.0 - h);
 }
 
-
-
+// Scene composition
 struct HitInfo {
     float dist;
     int   id;
@@ -335,9 +353,9 @@ SceneHit rayMarch(vec3 ro, vec3 rd){
     return nh;
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // MATERIALS
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 Material getBlendedMaterial(float blend){
     Material m;
     m.albedo           = mix(u_sphereAlbedo,           u_sphere02Albedo,           blend);
@@ -349,7 +367,6 @@ Material getBlendedMaterial(float blend){
     m.subsurfaceRadius = mix(u_sphereSubsurfaceRadius, u_sphere02SubsurfaceRadius, blend);
     m.subsurfaceColor  = mix(u_sphereSubsurfaceColor,  u_sphere02SubsurfaceColor,  blend);
 
-    // pick integer type
     float tType = float(u_sphereSubsurfaceType)*(1.0-blend) + float(u_sphere02SubsurfaceType)*blend + 0.5;
     m.subsurfaceType = int(floor(tType));
 
@@ -368,9 +385,9 @@ Material getMaterial(int id, float blend){
     return sphereMat; // fallback
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // TANGENT FRAME
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 void buildTangentFrame(vec3 N, out vec3 T, out vec3 B){
     if(abs(N.x) > abs(N.z)){
         T = vec3(-N.y, N.x, 0.0);
@@ -381,9 +398,9 @@ void buildTangentFrame(vec3 N, out vec3 T, out vec3 B){
     B = cross(N, T);
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // UTILS: FRESNEL & GGX
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 vec3 fresnelSchlick(float cosTheta, vec3 F0){
     return F0 + (1.0 - F0)*pow(1.0 - cosTheta, 5.0);
 }
@@ -403,9 +420,9 @@ float G_SmithGGXCorrelated(float NdotV, float NdotL, float r){
     return gv*gl;
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // IMPORTANCE SAMPLING
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 vec3 sampleGGXHemisphere(vec3 N, float r, float r1, float r2){
     float a  = r*r;
     float phi = 2.0*M_PI*r1;
@@ -427,9 +444,9 @@ vec3 sampleHemisphereCosine(vec3 N, float r1, float r2){
     return normalize(L);
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // SUBSURFACE APPROX
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 vec3 evalSubsurface(
     int   sssType,
     float subsurfaceWeight,
@@ -463,9 +480,9 @@ vec3 evalSubsurface(
     return sssFactor * subsurfaceColor;
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // EVAL BSDF
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 vec3 evalBSDF(Material mat, vec3 N, vec3 V, vec3 L, out float pdf){
     vec3 H      = normalize(L + V);
     float NdotL = max(dot(N,L), 0.0);
@@ -513,9 +530,9 @@ vec3 evalBSDF(Material mat, vec3 N, vec3 V, vec3 L, out float pdf){
     return bsdf;
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // AREA LIGHT
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 float areaLightPDF(vec3 Lpos, vec3 hp, vec3 N){
     float area  = u_lightSize.x * u_lightSize.y;
     vec3  ld    = Lpos - hp;
@@ -543,9 +560,9 @@ vec3 sampleAreaLight(inout uvec4 seed){
     return lp;
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // DEPTH OF FIELD + LENS UTILS
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 vec2 sampleDisk(inout uvec4 seed){
     float r0   = random(seed);
     float r1   = random(seed);
@@ -555,100 +572,437 @@ vec2 sampleDisk(inout uvec4 seed){
 }
 
 // Radial lens distortion function
-//   We treat (x,y) in [-1..1] from center. 
-//   k1, k2 are typical polynomial distortion coefficients.
 vec2 distortUV(vec2 uv, float k1, float k2){
     float r2 = dot(uv, uv);
     float f  = 1.0 + k1*r2 + k2*(r2*r2);
     return uv * f;
 }
 
-// -----------------------------------------------------
-// PATH TRACE
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
+// VOLUME FUNCTIONS (LAFORTUNE & WILLEMS - STYLE)
+// --------------------------------------------------------------------------------------
+
+// 1) Check if a ray intersects the volume bounding box.
+bool intersectsVolumeBBox(vec3 ro, vec3 rd, out float tmin, out float tmax){
+    // Slab method
+    vec3 invR = vec3(1.0/rd.x, 1.0/rd.y, 1.0/rd.z);
+    vec3 t0s = (u_volumeMin - ro)*invR;
+    vec3 t1s = (u_volumeMax - ro)*invR;
+
+    vec3 tsmaller = min(t0s, t1s);
+    vec3 tbigger  = max(t0s, t1s);
+
+    tmin = max(tsmaller.x, max(tsmaller.y, tsmaller.z));
+    tmax = min(tbigger.x,  min(tbigger.y,  tbigger.z));
+    return (tmax > max(tmin, 0.0));
+}
+
+// 2) Sample distance to the next scattering event (homogeneous medium).
+//    p(t) = sigma_t * exp(-sigma_t * t)
+float sampleDistance(inout uvec4 seed, float sigma_t){
+    float xi = random(seed);
+    // t = -ln(1 - xi) / sigma_t  => we can use xi directly
+    // Often we do  t = -log(xi)/sigma_t
+    return -log(xi)/sigma_t;
+}
+
+// 3) Henyey-Greenstein phase function sampling
+//    p(cosTheta) = (1 - g^2) / (4π(1 + g^2 - 2g cosTheta)^(3/2))
+vec3 samplePhaseHenyeyGreenstein(vec3 w, float g, inout uvec4 seed){
+    float xi1 = random(seed);
+    float xi2 = random(seed);
+
+    float cosTheta = 0.0;
+    if(abs(g) < 1e-3){
+        cosTheta = 1.0 - 2.0*xi1;
+    } else {
+        float tmp = (1.0 - g*g)/(1.0 - g + 2.0*g*xi1);
+        cosTheta = (1.0 + g*g - tmp*tmp)/(2.0*g);
+    }
+
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
+    float phi      = 2.0*M_PI * xi2;
+
+    // Build local frame
+    vec3 t, b;
+    buildTangentFrame(w, t, b);
+
+    float cp = cos(phi);
+    float sp = sin(phi);
+
+    // direction in local spherical coords
+    vec3 dLocal = vec3(cp*sinTheta, sp*sinTheta, cosTheta);
+
+    // transform back to world
+    return normalize(dLocal.x*t + dLocal.y*b + dLocal.z*w);
+}
+
+// 4) Evaluate the transmittance (for homogeneous medium):
+//    T = exp(-sigma_t * d)
+float transmittance(float sigma_t, float dist){
+    return exp(-sigma_t*dist);
+}
+
+// --------------------------------------------------------------------------------------
+// PATH TRACING WITH VOLUME
+// --------------------------------------------------------------------------------------
+
+struct MediumInteraction {
+    bool  happened;
+    vec3  position;
+    float distTraveled;
+};
+
+MediumInteraction sampleVolumeInteraction(vec3 ro, vec3 rd, inout uvec4 seed){
+    MediumInteraction mi;
+    mi.happened     = false;
+    mi.position     = vec3(0.0);
+    mi.distTraveled = 0.0;
+
+    if(!u_enableVolume) {
+        return mi; 
+    }
+
+    float tmin, tmax;
+    bool intersects = intersectsVolumeBBox(ro, rd, tmin, tmax);
+    if(!intersects){
+        return mi; 
+    }
+
+    // Move to tmin if needed
+    float tstart = max(tmin, 0.0);
+    vec3 pStart = ro + rd*tstart;
+    
+    // total extinction
+    float sigma_t = u_volumeSigmaA + u_volumeSigmaS;
+    // sample distance
+    float distSample = sampleDistance(seed, sigma_t);
+
+    // If distSample < (tmax - tstart), we have a scattering event
+    if(distSample < (tmax - tstart)){
+        mi.happened     = true;
+        mi.distTraveled = distSample;
+        mi.position     = pStart + rd*distSample;
+    }
+
+    return mi;
+}
+
+// A combined function that checks surface and volume:
+// We look for whichever is encountered first. If the volume scattering
+// event is nearer than a surface, we do volumetric scattering. 
+// Otherwise, we do surface intersection.
+bool traceNextEvent(
+    vec3 ro,
+    vec3 rd,
+    inout uvec4 seed,
+    out SceneHit surfaceHit,
+    out MediumInteraction mediumHit,
+    out float travelDist
+){
+    surfaceHit = rayMarch(ro, rd);
+    mediumHit  = sampleVolumeInteraction(ro, rd, seed);
+
+    if(!surfaceHit.hit && !mediumHit.happened){
+        // no surface, no volume scattering => no event
+        travelDist = 50.0; // or something large
+        return false;
+    }
+
+    // If volume scattering happened:
+    if(mediumHit.happened){
+        float distVolume = 0.0;
+        // distance from ro to mediumHit
+        // we have to find the actual param t along rd
+        // we already computed tstart + distSample
+        // but let's do it carefully:
+        // We know we started at ro and the scattering is at mediumHit.position
+        vec3 delta = mediumHit.position - ro;
+        distVolume = length(delta);
+
+        if(surfaceHit.hit){
+            vec3 surfDelta = surfaceHit.pos - ro;
+            float distSurf = length(surfDelta);
+            if(distVolume < distSurf){
+                // volume is first
+                travelDist = distVolume;
+                surfaceHit.hit = false; // disregard surface
+                return true;
+            } else {
+                // surface is first
+                mediumHit.happened = false;
+                travelDist = distSurf;
+                return true;
+            }
+        } else {
+            // no surface, volume only
+            travelDist = distVolume;
+            return true;
+        }
+    } else {
+        // no volume scattering, but we do have a surface
+        // or maybe none, if both are false, handled above
+        if(surfaceHit.hit){
+            vec3 delta = surfaceHit.pos - ro;
+            float distSurf = length(delta);
+            travelDist = distSurf;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// The final path tracer that does surface + volumetric scattering
 vec3 traceRay(inout uvec4 seed, vec3 ro, vec3 rd){
     vec3 L  = vec3(0.0);
     vec3 tp = vec3(1.0);
 
-    for(int b=0; b<MAX_BOUNCES; b++){
-        SceneHit hit = rayMarch(ro, rd);
-        if(!hit.hit){
-            // e.g. sky
-            // L += vec3(0.8, 0.9, 1.0)*tp;
-            // break;
-        }
+    float sigmaA = u_volumeSigmaA;
+    float sigmaS = u_volumeSigmaS;
+    float sigmaT = sigmaA + sigmaS; // extinction
 
-        Material mat = getMaterial(hit.id, hit.blend);
+    for(int bounce=0; bounce<MAX_BOUNCES; bounce++){
+        // Find next event (surface or medium)
+        SceneHit   surfHit;
+        MediumInteraction medHit;
+        float travelDist = 0.0;
+        bool foundSomething = traceNextEvent(ro, rd, seed, surfHit, medHit, travelDist);
 
-        // Emissive check
-        if(length(mat.emission)>0.0){
-            L += tp*mat.emission;
+        // If nothing found => environment 
+        if(!foundSomething){
+            // e.g. add environment color if you want
+            // L += vec3(0.8, 0.9, 1.0) * tp;
             break;
         }
 
-        vec3 N = hit.normal;
-        vec3 V = -rd;
-
-        // direct lighting
-        vec3 lpos   = sampleAreaLight(seed);
-        vec3 ldir   = normalize(lpos - hit.pos);
-        float ldist = length(lpos - hit.pos);
-        SceneHit sh = rayMarch(hit.pos + N*EPSILON, ldir);
-        bool unsh   = (!sh.hit || length(sh.pos - hit.pos)>ldist - EPSILON);
-
-        float dpl   = areaLightPDF(lpos, hit.pos, N);
-        float dpb;
-        vec3 bsdfVal= evalBSDF(mat, N, V, ldir, dpb);
-        float NdotL = max(dot(N, ldir), 0.0);
-
-        if(unsh && NdotL>0.0 && dpl>0.0){
-            vec3 Le = areaLightEmission(lpos, hit.pos);
-            float misw = (dpl+dpb>0.0)? dpl/(dpl+dpb):0.0;
-            L += tp*Le*bsdfVal*(NdotL/(dpl+1e-8))*misw;
+        // Attenuate for traveling 'travelDist' in the medium
+        if(u_enableVolume){
+            float Tr = transmittance(sigmaT, travelDist);
+            tp *= Tr;
         }
 
-        // next event from BSDF
-        float clobe = random(seed);
-        vec3 ndir;
-        float diffW = (1.0 - mat.metalness)*(1.0 - mat.transmission) + mat.subsurface;
-        bool pickDiffuse = (clobe<0.5 && diffW>0.0);
+        // Check if we have a medium interaction (volumetric scattering)
+        if(medHit.happened){
+            // We are inside the volume. Possibly we have volumetric emission:
+            vec3 volEmis = u_volumeEmission;
+            if(length(volEmis) > 0.0){
+                // Add emission
+                L += tp * volEmis;
+            }
 
-        if(pickDiffuse){
-            float r1 = random(seed);
-            float r2 = random(seed);
-            ndir      = sampleHemisphereCosine(N, r1, r2);
-        } else {
-            float r1 = random(seed);
-            float r2 = random(seed);
-            vec3 H = sampleGGXHemisphere(N, mat.roughness, r1, r2);
-            ndir    = reflect(-V, H);
+            // Next-event estimation from volume:
+            // We can sample the area light and see if the segment is unoccluded.
+            {
+                vec3 lpos   = sampleAreaLight(seed);
+                vec3 ldir   = normalize(lpos - medHit.position);
+                float ldist = length(lpos - medHit.position);
+
+                // We must check both surfaces and another volume event:
+                // For simplicity, let's do a quick shadow check ignoring volume scattering:
+                // or you can do a transmittance factor along ldir to light
+                float T_toLight = 1.0;
+                if(u_enableVolume){
+                    // compute transmittance to the light ignoring additional volume scattering events:
+                    // integrated transmittance in homogeneous medium is exp(-sigmaT * dist).
+                    // Then do a surface check:
+                    SceneHit sh = rayMarch(medHit.position + ldir*EPSILON, ldir);
+                    float planeDist = 9999.0;
+                    if(sh.hit){
+                        planeDist = length(sh.pos - medHit.position);
+                    }
+                    if(planeDist < (ldist - EPSILON)){
+                        T_toLight = 0.0; 
+                    } else {
+                        // no surface block => volume attenuation
+                        T_toLight = transmittance(sigmaT, ldist);
+                    }
+                } else {
+                    // fallback if volume not enabled
+                    SceneHit sh = rayMarch(medHit.position + ldir*EPSILON, ldir);
+                    if(sh.hit){
+                        float blockDist = length(sh.pos - medHit.position);
+                        if(blockDist < (ldist - EPSILON)){
+                            T_toLight = 0.0;
+                        }
+                    }
+                }
+
+                float dpl = areaLightPDF(lpos, medHit.position, vec3(0.0,1.0,0.0));
+                // Phase function
+                vec3 w = -rd; // incoming direction
+                vec3 pf = vec3(1.0); // default isotropic or HG
+                if(abs(u_volumeG) < 1e-3){
+                    // isotropic
+                    pf = vec3(1.0/(4.0*M_PI));
+                } else {
+                    // Evaluate Henyey-Greenstein
+                    float cosTheta = dot(w, ldir);
+                    float g = u_volumeG;
+                    float denom = 1.0 + g*g - 2.0*g*cosTheta;
+                    pf = vec3((1.0 - g*g)/(4.0*M_PI*pow(denom,1.5)));
+                }
+
+                // dpl can be 0 if degenerate geometry
+                if(dpl > 0.0 && T_toLight > 0.0){
+                    vec3 Le = areaLightEmission(lpos, medHit.position);
+                    // Next-event weighting via MIS:
+                    // For volumes, the pdf to sample direction is just the phase function * 1 over 4π or so,
+                    // but let's keep it simple.
+                    float pdf_phase = 1.0/(4.0*M_PI);
+                    if(abs(u_volumeG) > 1e-3){
+                        // we'd do a real phase pdf, but let's keep it conceptual
+                        // The real PDF if sampling phase is the same formula as pf * 4π, etc.
+                        // not simplifying => let's do it properly:
+                        // p(ω) = HG(...) => integral is 1 => the pdf is exactly that same formula if normalized
+                        // We already store that in pf. Let’s define pdf_phase = scalar version:
+                        pdf_phase = pf.x; // if the phase is R, G, B same => just use .x
+                    }
+                    // combined pdf = area light pdf + phase pdf => MIS
+                    float mis = dpl / (dpl + pdf_phase + 1e-8);
+
+                    L += tp * sigmaS * pf * Le * T_toLight * mis / (dpl+1e-8);
+                }
+            }
+
+            // Now pick a new direction from the phase function
+            vec3 newDir = vec3(0.0);
+            {
+                newDir = samplePhaseHenyeyGreenstein(-rd, u_volumeG, seed);
+            }
+
+            // Phase function factor
+            // For the next bounce, the throughput is multiplied by:
+            //   tp *= sigmaS * p( newDir ) / pdf( newDir )  
+            // But if we sample from the phase function, the pdf is exactly the same as the phase function, so they cancel out, leaving sigmaS. 
+            // If we do color-based albedo in the medium, we multiply that in as well:
+            float phasePDF = 1.0/(4.0*M_PI);
+            if(abs(u_volumeG) > 1e-3){
+                // Evaluate HG at cosTheta=dot(-rd,newDir)
+                float cosTheta = dot(-rd, newDir);
+                float g = u_volumeG;
+                float denom = 1.0 + g*g - 2.0*g*cosTheta;
+                float pfVal = (1.0 - g*g)/(4.0*M_PI*pow(denom,1.5));
+                phasePDF = pfVal; 
+            }
+            // Because we used the same function to sample, pfVal ~ pdf. 
+            // So the ratio pfVal / pdf ~ 1.0, ignoring any color variation. 
+            // We'll do a simpler approach:
+            tp *= sigmaS * u_volumeAlbedo; 
+            
+            // Russian roulette
+            float rrProb = 0.9;
+            if(random(seed) > rrProb){
+                break;
+            }
+            tp /= rrProb;
+
+            ro = medHit.position + newDir*EPSILON;
+            rd = newDir;
+        }
+        else {
+            // We hit a surface
+            // If there's emission:
+            Material mat = getMaterial(surfHit.id, surfHit.blend);
+            if(length(mat.emission)>0.0){
+                L += tp*mat.emission;
+                break;
+            }
+
+            // Next-event from surface
+            {
+                vec3 lpos   = sampleAreaLight(seed);
+                vec3 ldir   = normalize(lpos - surfHit.pos);
+                float ldist = length(lpos - surfHit.pos);
+                SceneHit sh = rayMarch(surfHit.pos + surfHit.normal*EPSILON, ldir);
+                bool unsh   = (!sh.hit || length(sh.pos - surfHit.pos) > (ldist - EPSILON));
+
+                float dpl   = areaLightPDF(lpos, surfHit.pos, surfHit.normal);
+                float dpb;
+                vec3 bsdfVal= evalBSDF(mat, surfHit.normal, -rd, ldir, dpb);
+                float NdotL = max(dot(surfHit.normal, ldir), 0.0);
+
+                // Volume check for shadows
+                float T_vol = 1.0;
+                if(u_enableVolume && unsh){
+                    // check if the ray from surfHit.pos to lpos passes in the volume
+                    // We do a quick bounding box test, then multiply by transmittance
+                    float tminBB, tmaxBB;
+                    bool volInt = intersectsVolumeBBox(surfHit.pos + surfHit.normal*EPSILON, ldir, tminBB, tmaxBB);
+                    if(volInt){
+                        // compute intersection with the bounding box
+                        float distLight = length(lpos - surfHit.pos);
+                        float entryT = max(tminBB, 0.0);
+                        float exitT  = tmaxBB;
+
+                        if(exitT > entryT) {
+                            // segment length in the volume
+                            float segLength = min(distLight, exitT) - entryT;
+                            // approximate transmittance
+                            T_vol = exp(-sigmaT*segLength);
+                        }
+                    }
+                }
+
+                if(unsh && NdotL>0.0 && dpl>0.0 && T_vol>1e-8){
+                    vec3 Le = areaLightEmission(lpos, surfHit.pos);
+                    float misw = (dpl+dpb>0.0)? dpl/(dpl+dpb):0.0;
+                    L += tp * Le * bsdfVal * (NdotL * T_vol/(dpl+1e-8)) * misw;
+                }
+            }
+
+            // Next bounce from BSDF
+            vec3 ndir;
+            {
+                float clobe = random(seed);
+                float diffW = (1.0 - mat.metalness)*(1.0 - mat.transmission) + mat.subsurface;
+                bool pickDiffuse = (clobe<0.5 && diffW>0.0);
+
+                if(pickDiffuse){
+                    float r1 = random(seed);
+                    float r2 = random(seed);
+                    ndir = sampleHemisphereCosine(surfHit.normal, r1, r2);
+                } else {
+                    float r1 = random(seed);
+                    float r2 = random(seed);
+                    vec3 H = sampleGGXHemisphere(surfHit.normal, mat.roughness, r1, r2);
+                    ndir    = reflect(-rd, H);
+                }
+            }
+
+            float npdf;
+            vec3 be = evalBSDF(mat, surfHit.normal, -rd, ndir, npdf);
+            float NdotNext = max(dot(surfHit.normal, ndir), 0.0);
+            if(npdf<1e-7 || NdotNext<EPSILON){
+                break;
+            }
+
+            // Russian roulette
+            float rrProb = 0.9;
+            if(random(seed) > rrProb){
+                break;
+            }
+            be /= rrProb;
+
+            tp *= be*(NdotNext/npdf);
+
+            ro = surfHit.pos + surfHit.normal*EPSILON;
+            rd = ndir;
         }
 
-        float npdf;
-        vec3 be = evalBSDF(mat, N, V, ndir, npdf);
-        float NdotNext = max(dot(N, ndir), 0.0);
-        if(npdf<1e-7 || NdotNext<EPSILON){
+        // Safeguard to avoid infinite bright
+        if(dot(tp, tp) > 10000.0){
             break;
         }
-
-        // Russian roulette
-        float rrProb = 0.9;
-        if(random(seed)>rrProb){
-            break;
-        }
-        be /= rrProb;
-
-        tp *= be*(NdotNext/npdf);
-
-        ro = hit.pos + N*EPSILON;
-        rd = ndir;
     }
+
+    // clamp final
     return min(L, vec3(10.0));
 }
 
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 // MAIN
-// -----------------------------------------------------
+// --------------------------------------------------------------------------------------
 void main()
 {
     // Build seed
@@ -666,65 +1020,40 @@ void main()
     float ry = random(seed) - 0.5;
     vec2 uvCenter = vec2(v_uv.x + rx*(1.0/u_resolution.x),
                          v_uv.y + ry*(1.0/u_resolution.y));
-    vec2 uv = uvCenter*2.0 - 1.0;
+    vec2 uv = uvCenter * 2.0 - 1.0;
     uv.x *= aspect;
 
-    // We'll do THREE separate rays, one for each color channel,
-    // with slight differences for chromatic aberration.
-    // We'll gather them and combine into finalColor.
-    // This means physically we're changing the lens distortion or focus slightly.
-    // A simpler approach is to shift k1/k2 or the focus for each channel.
-    // We'll do a small shift in the distortion for each channel.
-
-    // Base distortion = (k1, k2).
-    // We'll define a small offset for each channel = +/- u_chromaticAberration
-    // E.g. red gets +0.5*cAb, blue gets -0.5*cAb, green gets 0 shift
-    // This is not hyper-realistic, but it’s a valid no-placeholder approximation.
-
+    // We'll do three separate rays for R/G/B, with slight lens-dist changes
     float halfCA = 0.5 * u_chromaticAberration;
-
-    // We'll store color results for each channel
     float rColor, gColor, bColor;
 
-    // =========== Channel: RED ===========
+    // --- RED ---
     {
-        // Distort uv
         vec2 uvR = distortUV(uv, u_lensDistortionK.x + halfCA, 
-                                  u_lensDistortionK.y + halfCA);
-        // Build local direction
+                                 u_lensDistortionK.y + halfCA);
         vec3 rdLocal = normalize(vec3(uvR.x*fs, uvR.y*fs, 1.0));
-
-        // Camera rotation
         rdLocal = rotationX(u_cameraRot.x)*rotationY(u_cameraRot.y)*rotationZ(u_cameraRot.z)*rdLocal;
-        // Now to world
         vec3 rd = normalize(cam * rdLocal);
         vec3 ro = u_cameraPos;
 
-        // Depth of field:
-        // lens radius
         float lensRadius = u_cameraAperture*0.5;
-        // random lens sample
         vec2 diskSample = sampleDisk(seed)*lensRadius;
-        // offset on lens plane
         vec3 lensOffset = cam[0]*diskSample.x + cam[1]*diskSample.y;
         ro += lensOffset;
 
-        // focusing
         float denom = dot(rd, cam[2]);
         float tFocus = (denom>0.0) ? (u_cameraFocusDistance / denom) : u_cameraFocusDistance;
         vec3 focusPoint = u_cameraPos + rd*tFocus;
         rd = normalize(focusPoint - ro);
 
-        // Trace
         rColor = traceRay(seed, ro, rd).r; 
     }
 
-    // =========== Channel: GREEN ===========
+    // --- GREEN ---
     {
         vec2 uvG = distortUV(uv, u_lensDistortionK.x, 
-                                  u_lensDistortionK.y);
+                                 u_lensDistortionK.y);
         vec3 rdLocal = normalize(vec3(uvG.x*fs, uvG.y*fs, 1.0));
-
         rdLocal = rotationX(u_cameraRot.x)*rotationY(u_cameraRot.y)*rotationZ(u_cameraRot.z)*rdLocal;
         vec3 rd = normalize(cam * rdLocal);
         vec3 ro = u_cameraPos;
@@ -742,12 +1071,11 @@ void main()
         gColor = traceRay(seed, ro, rd).g; 
     }
 
-    // =========== Channel: BLUE ===========
+    // --- BLUE ---
     {
         vec2 uvB = distortUV(uv, u_lensDistortionK.x - halfCA, 
-                                  u_lensDistortionK.y - halfCA);
+                                 u_lensDistortionK.y - halfCA);
         vec3 rdLocal = normalize(vec3(uvB.x*fs, uvB.y*fs, 1.0));
-
         rdLocal = rotationX(u_cameraRot.x)*rotationY(u_cameraRot.y)*rotationZ(u_cameraRot.z)*rdLocal;
         vec3 rd = normalize(cam * rdLocal);
         vec3 ro = u_cameraPos;
@@ -768,20 +1096,14 @@ void main()
     // Combine
     vec3 finalColor = vec3(rColor, gColor, bColor);
 
-    // -----------------------------------------------------
-    // VIGNETTING
-    // -----------------------------------------------------
-    // Typically, we do something like:
-    //   distanceFromCenter = length( uv ) 
-    //   vignetFactor = 1.0 - clamp(distanceFromCenter * strength, 0.0, 1.0)
-    // Or any advanced formula. We’ll keep it straightforward:
-
-    float distFromCenter = length(uv);   // uv in [-1..1]
+    // Vignette
+    float distFromCenter = length(uv);
     float vig = 1.0 - clamp(distFromCenter * u_vignetteStrength, 0.0, 1.0);
     finalColor *= vig;
 
     outColor = vec4(finalColor, 1.0);
 }
+
 `;
 
 

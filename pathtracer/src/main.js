@@ -15,18 +15,27 @@ let camera = {
   focusDist: 8.3,
   lensDistortion: { k1: 0.0, k2: 0.0 },
   chromaticAberration: 0.1,
-  vignette: 0.9,
+  vignette: 0.65,
   angle: 0.0, // Angle for horizontal movement
   height: 0.0, // Vertical height offset
   radius: 8.0, // Distance from the center
 };
 
 let light = {
-  pos: { x: -5.4, y: 6.0, z: -4.5 },
+  pos: { x: -0.8, y: 3.7, z: -4.8 },
   size: { x: 4.0, y: 4.0 },
-  intensity: 15.0,
+  intensity: 120.0,
   color: { r: 255, g: 255, b: 255 },
 };
+
+let volume = {
+  absorbtion: 0.01,
+  scattering: 0.08,
+  scatteringAnisotropy: 0.0,
+  albedo: { r: 255, g: 255, b: 255 },
+  emissive: { r: 0, g: 0, b: 0 },
+};
+
 
 let sphere01 = {
   pos: { x: -0.3, y: 0.0, z: 0.0 },
@@ -52,7 +61,7 @@ let sphere02 = {
   emissive: { r: 0, g: 0, b: 0 },
 };
 
-let gui = new GUI(app, camera, light, sphere01, sphere02);
+let gui = new GUI(app, camera, light, sphere01, sphere02, volume);
 
 // Interaction state
 let isDragging = false;

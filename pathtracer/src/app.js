@@ -50,13 +50,48 @@ class WebGLApp {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, src);
     gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error(`Shader compile error: ${gl.getShaderInfoLog(shader)}`);
+  
+    const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+    if (!success) {
+      // Get the error log
+      const infoLog = gl.getShaderInfoLog(shader) || "";
+  
+      // Print the raw info log to have the original info
+      console.error(`Shader compile error (raw):\n${infoLog}`);
+  
+      // If the WebGL implementation gives us a line number, parse it
+      // Most browsers print something like: "ERROR: 0:23: 'some message' ..."
+      // where '0:23' means line 23 in the shader code
+      const shaderLines = src.split("\n");
+      const logLines = infoLog.split("\n");
+  
+      // We'll look for something like: ERROR: 0:<lineNumber>:
+      const lineRegex = /ERROR:\s*\d*:(\d+):/;
+  
+      logLines.forEach((logLine) => {
+        const match = lineRegex.exec(logLine);
+        if (match && match[1]) {
+          const lineNumber = parseInt(match[1], 10);
+          const sourceLine = shaderLines[lineNumber];
+  
+          console.error(
+            `%c> Error on shader line ${lineNumber}: %c${sourceLine}`,
+            "color: red; font-weight: bold;",
+            "color: white;"
+          );
+        } else {
+          // If it doesn't match the typical pattern, just log the line
+          console.error(logLine);
+        }
+      });
+  
       gl.deleteShader(shader);
       return null;
     }
+  
     return shader;
   }
+  
 
   createProgram(vsSrc, fsSrc) {
     const gl = this.gl;
