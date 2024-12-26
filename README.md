@@ -6,7 +6,7 @@
 
 # ToDo
 
- 1. Correctly implement anistropic and transmission
+ 1. Correctly implement anisotropic and transmission
  2. Other types of lights
  3. Modeling options
  4. Fractal formulas
