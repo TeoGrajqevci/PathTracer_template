@@ -12,4 +12,4 @@
  4. Fractal formulas
  5. Image texture
  6. Environment map
-7. Atmospheric lighting
+
